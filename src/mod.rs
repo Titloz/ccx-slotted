@@ -1,5 +1,4 @@
-pub use slotted_egraphs_derive::define_language;
-pub use symbol_table::GlobalSymbol as Symbol;
+//pub use symbol_table::GlobalSymbol as Symbol;
 
 mod mylanguage;
 pub use mylanguage::*;

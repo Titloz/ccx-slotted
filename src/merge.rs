@@ -2,10 +2,9 @@ use std::collections::{HashMap, VecDeque};
 use crate::*;
 use rustc_hash::FxBuildHasher;
 
-type Unifier = HashMap<Slot, AppliedId>;
+pub(crate) type Unifier = HashMap<Slot, AppliedId>;
 
-fn compute_mgus<L: Language, N: Analysis<L>>
-    (eg: &EGraph<L,N>, a: &AppliedId, b: &AppliedId, mu: &Unifier, visited: &HashSet<(AppliedId, AppliedId)>)
+fn compute_mgus(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, visited: &HashSet<(AppliedId, AppliedId)>)
      -> (Vec<HashMap<Slot, AppliedId>>, HashSet<(AppliedId, AppliedId)>) {
 
     let mut l : Vec<HashMap<Slot, AppliedId>> = Vec::new();
@@ -14,7 +13,7 @@ fn compute_mgus<L: Language, N: Analysis<L>>
     }
     let mut visited_bis = visited.clone();
     visited_bis.insert((a.clone(),b.clone()));
-
+    // possibly change this part. directly use the language instead?
     for na in eg.enodes_applied(&a) {
         for nb in eg.enodes_applied(&b) {
             match &na.to_syntax()[0] { // the binder case is not handled at the moment
@@ -160,8 +159,7 @@ fn compute_mgus<L: Language, N: Analysis<L>>
     return (l, visited_bis);
 }
 
-fn dec_case<L: Language, N: Analysis<L>>
-    (eg: &EGraph<L,N>, equalities: &mut Vec<(&AppliedId, &AppliedId)>, pairs: Vec<(Unifier, HashSet<(AppliedId, AppliedId)>)>)
+fn dec_case(eg: &MyEGraph, equalities: &mut Vec<(&AppliedId, &AppliedId)>, pairs: Vec<(Unifier, HashSet<(AppliedId, AppliedId)>)>)
     -> Vec<(Unifier, HashSet<(AppliedId, AppliedId)>)> {
     if equalities.len() == 0 {
         let mut pairs_cp = Vec::new();
@@ -181,8 +179,7 @@ fn dec_case<L: Language, N: Analysis<L>>
     return dec_case(eg, equalities, l);
 }
 
-fn occ<L: Language, N: Analysis<L>>
-    (_eg: &EGraph<L,N>, mu: &Unifier, c: &AppliedId, v: &Slot) -> bool {
+fn occ(_eg: &MyEGraph, mu: &Unifier, c: &AppliedId, v: &Slot) -> bool {
     for x in c.slots() {
         match mu.get(&x) {
             Some(c_bis) => {
@@ -198,21 +195,15 @@ fn occ<L: Language, N: Analysis<L>>
     return false;
 }
 
-fn apply_unifier_class<L: Language>
-    (eg: &EGraph<L,AstSizeAnalysis>, mu: &Unifier, c0: &AppliedId) -> (AppliedId, bool) 
-{
+fn apply_unifier_class(eg: &MyEGraph, mu: &Unifier, c0: &AppliedId) -> (AppliedId, bool) {
     todo!()
 }
 
-fn rec_parents<L: Language, N: Analysis<L>>
-    (eg: &mut EGraph<L,N>, c0: &AppliedId) -> Vec<AppliedId>
-{
+fn rec_parents(eg: &mut MyEGraph, c0: &AppliedId) -> Vec<AppliedId> {
     todo!()
 }
 
-pub(crate) fn merge<L: Language>
-    (eg: &mut EGraph<L,AstSizeAnalysis>, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool 
-{
+pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
     for c1 in wo.clone() {
         // quite unsure about this beginning
         let hash_builder = rustc_hash::FxBuildHasher::from(FxBuildHasher {});

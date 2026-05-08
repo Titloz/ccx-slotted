@@ -1,7 +1,7 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use crate::*;
 
-fn deduct_intern<L: Language>(eg: &EGraph<L,AstSizeAnalysis>, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { //, c_new: &AppliedId,
+fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { 
     if i!=n {
         // construct a candidate e-node
         for c in wo.clone() {
@@ -15,19 +15,33 @@ fn deduct_intern<L: Language>(eg: &EGraph<L,AstSizeAnalysis>, max: u64, wo: &mut
     } else if used {
         // the e-node contains c0 as a child
         let mut sum_analyses = 1;
-        for child in choices {
+        let mut rev_children = vec![];
+        for child in choices.clone() {
             sum_analyses += *eg.analysis_data(child.id);
+            rev_children.push(child);
         }
         if sum_analyses <= max {
-            // add the new e-node
+            // add the new e-node app(app(...app(f,c1)...,cn-1),cn)
             // rebuild
+            // is there a variable problem here?
+            let mut class_f = eg.add(SimpleLang::Symbol(f.into()));
+            for child in choices {
+                class_f = eg.add(SimpleLang::App(class_f, child.clone()));
+            }
+            eg.rebuild();
+            update(eg, us);
+            update(eg, wo);
+            let new_ai = eg.find_applied_id(&class_f);
+            if !us.contains(&new_ai) {
+                us.push_back(new_ai);
+            }
         }
     }
     return true;
 }
 
 
-fn deduct<L: Language>(eg: &EGraph<L,AstSizeAnalysis>, symbol_list: &Vec<(String, u8)>, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
+fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
     // symbol_list is the list of symbols with their arity
     let analysis = *eg.analysis_data(c0.id);
     if analysis >= max {
