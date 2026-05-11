@@ -12,3 +12,14 @@ pub(crate) fn update(eg: &MyEGraph, worklist: &mut VecDeque<AppliedId>) {
     }
     *worklist = new_us;
 }
+
+pub(crate) fn delete_element(eg: &MyEGraph, worklist: &mut VecDeque<AppliedId>, c0: &AppliedId) {
+    let mut new_w0 = VecDeque::new();
+    let find_c0 = eg.find_applied_id(c0);
+    for c in worklist.clone() {
+        if c != find_c0 {
+            new_w0.push_back(c);
+        }
+    }
+    *worklist = new_w0;
+}

@@ -5,9 +5,9 @@ use rustc_hash::FxBuildHasher;
 pub(crate) type Unifier = HashMap<Slot, AppliedId>;
 
 fn compute_mgus(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, visited: &HashSet<(AppliedId, AppliedId)>)
-     -> (Vec<HashMap<Slot, AppliedId>>, HashSet<(AppliedId, AppliedId)>) {
+     -> (Vec<Unifier>, HashSet<(AppliedId, AppliedId)>) {
 
-    let mut l : Vec<HashMap<Slot, AppliedId>> = Vec::new();
+    let mut l : Vec<Unifier> = vec![];
     if visited.contains(&(a.clone(),b.clone())) || visited.contains(&(b.clone(),a.clone())) {
         return (l, visited.clone());
     }
@@ -16,149 +16,138 @@ fn compute_mgus(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, visit
     // possibly change this part. directly use the language instead?
     for na in eg.enodes_applied(&a) {
         for nb in eg.enodes_applied(&b) {
-            match &na.to_syntax()[0] { // the binder case is not handled at the moment
-                SyntaxElem::String(f) => {
-                    match &nb.to_syntax()[0] {
-                        SyntaxElem::String(g) => {
-                            if f==g {
-                                // Dec
-                                let mut eqs : Vec<(&AppliedId, &AppliedId)> = Vec::new();
-                                let mut i = 0;
-                                // i am quite unsure on which variables they are defined here... I must check that!
-                                for c in (&na).applied_id_occurrences() {
-                                    let mut j = 0;
-                                    for c_bis in (&nb).applied_id_occurrences() {
-                                        if i==j {
-                                            eqs.push((c,c_bis));
-                                            break;
-                                        } else { // j < i
-                                            j += 1;
-                                        }
-                                    }
-                                    i += 1;
-                                }
-                                let l_bis = dec_case(&eg, &mut eqs, vec![(mu.clone(), visited_bis.clone())]);
-                                for (sigma,_) in l_bis {
-                                    if !l.contains(&sigma){
-                                        l.push(sigma.clone());
-                                    }
-                                }
-                            } else {
-                                // DecFail
-                                continue;  
-                            };
-                        },
-                        SyntaxElem::Slot(x) => {
-                            match mu.get(x) {
-                                Some(c) => {
-                                    // LazyRep'
-                                    let (l_bis, _) = &compute_mgus(eg, a, c, mu, &visited_bis);
-                                    for el in l_bis {
-                                        if !l.contains(el) {
-                                            l.push(el.clone());
-                                        }
-                                    }
-                                },
-                                None => {
-                                    if !occ(eg, mu, a, x) {
-                                        // Bind'
-                                        let mut sigma = mu.clone();
-                                        sigma.insert(*x, a.clone());
-                                        if !l.contains(&sigma) {
-                                            l.push(sigma);
-                                        }
-                                    } else {
-                                        // Check'
-                                        continue;
-                                    }
-                                }
-                            }
-                        },
-                        SyntaxElem::AppliedId(_) => {
-                            // "is there really something to do?"
-                            continue;
+            match (na.clone(), nb) {
+                (SimpleLang::App(ref c1, ref c2), SimpleLang::App(ref c3, ref c4)) => {
+                    // Dec
+                    let (mu2s, visited_left) = compute_mgus(eg, c1, c3, mu, &visited_bis);
+                    let mut l_res = vec![];
+                    for mu2 in mu2s {
+                        let (mu3s, _) = compute_mgus(eg, c2, c4, &mu2, &visited_left);
+                        for mu3 in mu3s {
+                            l_res.push(mu3);
+                        }
+                    }
+                    for sigma in l_res {
+                        if !l.contains(&sigma) {
+                            l.push(sigma);
                         }
                     }
                 },
-                SyntaxElem::Slot(y) => {
-                    match &nb.to_syntax()[0] {
-                        SyntaxElem::String(_) => {
-                            match mu.get(y) {
-                                Some(c) => {
-                                    // LazyRep
-                                    let (l_bis, _) = &compute_mgus(eg, c, b, mu, &visited_bis);
-                                    //l.extend_from_slice(l_bis);
-                                    for el in l_bis {
-                                        if !l.contains(&el) {
-                                            l.push(el.clone());
-                                        }
+                (SimpleLang::Symbol(f), SimpleLang::Symbol(g)) => {
+                    if f==g {
+                        // Dec
+                        if !l.contains(mu){
+                            l.push(mu.clone());
+                        }
+                    } else {
+                        // DecFail
+                        continue;
+                    }
+                },
+                (SimpleLang::Number(n), SimpleLang::Number(m)) => {
+                    if n==m {
+                        // Dec
+                        if !l.contains(mu){
+                            l.push(mu.clone());
+                        } 
+                    } else {
+                        // DecFail
+                        continue;
+                    }
+                },
+                (SimpleLang::Var(y), SimpleLang::Var(x)) => {
+                    if x == y {
+                        // Triv
+                        if !l.contains(mu) {
+                            l.push(mu.clone());
+                        }
+                    } else {
+                        match mu.get(&y) {
+                            Some(c) => {
+                                // LazyRep
+                                let (l_bis, _) = &compute_mgus(eg, c, b, mu, &visited_bis);
+                                for el in l_bis {
+                                    if !l.contains(&el) {
+                                        l.push(el.clone());
                                     }
-                                },
-                                None => {
-                                    if !occ(eg, mu, b, y) {
-                                        // Bind
-                                        let mut sigma = mu.clone();
-                                        sigma.insert(*y, b.clone());
-                                        if !l.contains(&sigma){
-                                            l.push(sigma);
-                                        }
-                                    } else {
-                                        // Check
-                                        continue;
+                                }
+                            },
+                            None => {
+                                if !occ(mu, b, &y) {
+                                    // Bind
+                                    let mut sigma = mu.clone();
+                                    sigma.insert(y, b.clone());
+                                    if !l.contains(&sigma) {
+                                        l.push(sigma);
                                     }
+                                } else {
+                                    // Check
+                                    continue;
                                 }
                             }
-                        },
-                        SyntaxElem::Slot(x) => {
-                            if x == y {
-                                // Triv
-                                if !l.contains(mu) {
-                                    l.push(mu.clone());
-                                }
-                            } else {
-                                match mu.get(y) {
-                                    Some(c) => {
-                                        // LazyRep
-                                        let (l_bis, _) = &compute_mgus(eg, c, b, mu, &visited_bis);
-                                        //l.extend_from_slice(l_bis);
-                                        for el in l_bis {
-                                            if !l.contains(&el) {
-                                                l.push(el.clone());
-                                            }
-                                        }
-                                    },
-                                    None => {
-                                        if !occ(eg, mu, b, y) {
-                                            // Bind
-                                            let mut sigma = mu.clone();
-                                            sigma.insert(*y, b.clone());
-                                            if !l.contains(&sigma) {
-                                                l.push(sigma);
-                                            }
-                                        } else {
-                                            // Check
-                                            continue;
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        SyntaxElem::AppliedId(_) => {
-                            // "is there really something to do?"
-                            continue;
                         }
                     }
                 },
-                SyntaxElem::AppliedId(_) => {
-                    // "is there really something to do?"
-                    continue;
+                (SimpleLang::Var(y), _) => {
+                    match mu.get(&y) {
+                        Some(c) => { 
+                            // LazyRep
+                            let (l_bis,_) = &compute_mgus(eg, c, b, mu, &visited_bis);
+                            for el in l_bis {
+                                if !l.contains(el) {
+                                    l.push(el.clone());
+                                }
+                            }
+                        },
+                        None => {
+                            if !occ(mu, b, &y) {
+                                // Bind
+                                let mut sigma = mu.clone();
+                                sigma.insert(y, b.clone());
+                                if !l.contains(&sigma) {
+                                    l.push(sigma);
+                                }
+                            } else {
+                                // Check
+                                continue;
+                            }
+                        }
+                    }
+                },
+                (_, SimpleLang::Var(x)) => {
+                    match mu.get(&x) {
+                        Some(c) => {
+                            // LazyRep'
+                            let (l_bis, _) = &compute_mgus(eg, a, c, mu, &visited_bis);
+                            for el in l_bis {
+                                if !l.contains(el) {
+                                    l.push(el.clone());
+                                }
+                            }
+                        },
+                        None => {
+                            if !occ(mu, a, &x) {
+                                // Bind'
+                                let mut sigma = mu.clone();
+                                sigma.insert(x, a.clone());
+                                if !l.contains(&sigma) {
+                                    l.push(sigma);
+                                }
+                            } else {
+                                // Check'
+                                continue;
+                            }
+                        }
+                    }
                 }
+                _ => continue, // DecFail
             }
         }
     }
     return (l, visited_bis);
 }
 
+/* 
 fn dec_case(eg: &MyEGraph, equalities: &mut Vec<(&AppliedId, &AppliedId)>, pairs: Vec<(Unifier, HashSet<(AppliedId, AppliedId)>)>)
     -> Vec<(Unifier, HashSet<(AppliedId, AppliedId)>)> {
     if equalities.len() == 0 {
@@ -178,8 +167,9 @@ fn dec_case(eg: &MyEGraph, equalities: &mut Vec<(&AppliedId, &AppliedId)>, pairs
     }
     return dec_case(eg, equalities, l);
 }
+*/
 
-fn occ(_eg: &MyEGraph, mu: &Unifier, c: &AppliedId, v: &Slot) -> bool {
+fn occ(mu: &Unifier, c: &AppliedId, v: &Slot) -> bool { //_eg: &MyEGraph, 
     for x in c.slots() {
         match mu.get(&x) {
             Some(c_bis) => {
@@ -187,9 +177,7 @@ fn occ(_eg: &MyEGraph, mu: &Unifier, c: &AppliedId, v: &Slot) -> bool {
                     return true;
                 }
             },
-            None => {
-                continue;
-            }
+            None => continue,
         }
     }
     return false;

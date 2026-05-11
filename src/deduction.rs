@@ -2,12 +2,12 @@ use std::collections::VecDeque;
 use crate::*;
 
 fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { 
+    // wo must verify for all id i, eg.find_id(i)=i
     if i!=n {
         // construct a candidate e-node
         for c in wo.clone() {
-            choices.push(eg.find_applied_id(&c));
-            let rec = deduct_intern(eg, max, wo, us, f, i, n, c0, used, choices);
-            if !rec {
+            choices.push(c); //eg.find_applied_id(&c)
+            if !deduct_intern(eg, max, wo, us, f, i, n, c0, used, choices){
                 choices.pop();
                 return false;
             }
@@ -43,6 +43,7 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: 
 
 fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
     // symbol_list is the list of symbols with their arity
+    // wo must verify for all id i, eg.find_id(i)=i
     let analysis = *eg.analysis_data(c0.id);
     if analysis >= max {
         return true;
@@ -53,16 +54,8 @@ fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u64, wo: &mut
     }
     for (f, n) in symbol_list {
         let mut choices = Vec::new();
-        let res = deduct_intern(eg, max, wo, us, f, 0, *n, c0, false, &mut choices); //, c_new
-        if !res {
-            // wo = wo - {c0}
-            let mut new_w0 = VecDeque::new();
-            for c in wo.clone() {
-                if eg.find_applied_id(&c) != eg.find_applied_id(c0) {
-                    new_w0.push_back(eg.find_applied_id(&c));
-                }
-            }
-            *wo = new_w0;
+        if !deduct_intern(eg, max, wo, us, f, 0, *n, c0, false, &mut choices) {
+            delete_element(eg, wo, c0);
             return false;
         }
     }
