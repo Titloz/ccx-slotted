@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use rand::prelude::*;
 use crate::*;
 use rustc_hash::FxBuildHasher;
 
@@ -183,12 +184,127 @@ fn occ(mu: &Unifier, c: &AppliedId, v: &Slot) -> bool { //_eg: &MyEGraph,
     return false;
 }
 
-fn apply_unifier_class(eg: &MyEGraph, mu: &Unifier, c0: &AppliedId) -> (AppliedId, bool) {
-    todo!()
+fn apply_unifier_class_init(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, c1: &AppliedId) -> (AppliedId, Vec<AppliedId>) {
+    let mut visited: HashMap<Id, AppliedId> = HashMap::new();
+    let (nc0, v0) = apply_unifier_class(eg, mu, c0, &mut visited);
+    let (nc1, v1) = apply_unifier_class(eg, mu, c1, &mut visited);
+    let mut v = v0;
+    for c in v1 {
+        if !v.contains(&c) {
+            v.push(c);
+        }
+    }
+    let nc = eg.find_applied_id(&nc0);
+    if eg.union(&nc0, &nc1) {
+        v.push(nc.clone());
+    }
+    (nc, v)
 }
 
-fn rec_parents(eg: &mut MyEGraph, c0: &AppliedId) -> Vec<AppliedId> {
-    todo!()
+fn apply_unifier_class(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, visited: &mut HashMap<Id, AppliedId>) -> (AppliedId, Vec<AppliedId>) {
+    let i = eg.find_id(c0.id);
+    match visited.get(&i) {
+        None => {
+            let nodes = eg.enodes_applied(c0);
+            assert_ne!(nodes.len(), 0, "empty e-class!");
+            // In order to almost surely avoid being stuck in a loop, we need to pick the enode randomly each time. 
+            // There must be one enode that can be applied without necessarily looping, and we are almost sure to find it.
+            // Note: there might be a way to automatically get it... Maybe provide an e-class analysis that stores all nodes
+            // that can reach a class from which the first class is not reachable?
+            let mut rng = rand::rng();
+            let j = (0..nodes.len()).choose(&mut rng).unwrap();
+            let enode = &nodes[j];
+
+            let (new_class, new_v) = apply_unifier_enode(eg, mu, enode.clone(), visited);
+            visited.insert(i, new_class.clone()); // probably does not work if this eclass if reachable from this enode. Can I allocate a new (empty) eclass?
+            let mut v = new_v;
+            let mut has_unioned = false;
+            for n in nodes {
+                let (class_n, vn) = apply_unifier_enode(eg, mu, n, visited);
+                if eg.union(&new_class, &class_n) {
+                    has_unioned = true;
+                    for c in vn {
+                        if !v.contains(&c) {
+                            v.push(c);
+                        }
+                    }
+                }
+            }
+
+            if has_unioned {
+                v.push(new_class.clone());
+            }
+
+            (new_class, v)
+        },
+        Some(c) => (c.clone(), vec![]),
+    }
+}
+
+fn apply_unifier_enode(eg: &mut MyEGraph, mu: &Unifier, n: SimpleLang, visited: &mut HashMap<Id, AppliedId>) -> (AppliedId, Vec<AppliedId>) {
+    match n {
+        SimpleLang::App(c1, c2) => {
+            let (c3, v3) = apply_unifier_class(eg, mu, &c1, visited);
+            let (c4, v4) = apply_unifier_class(eg, mu, &c2, visited);
+            let mut v = v3.clone();
+            for c in v4 {
+                if !v3.contains(&c) {
+                    v.push(c);
+                }
+            }
+            (eg.add(SimpleLang::App(c3, c4)), v) 
+        },
+        SimpleLang::Var(x) => {
+            match mu.get(&x) {
+                None => (eg.add(n), vec![]), 
+                Some(c) => apply_unifier_class(eg, mu, c, visited), 
+            }
+        },
+        _ => (eg.add(n), vec![]), // nothing new is added but maybe i learn some equalities about e-classes
+    }
+}
+
+fn rec_parents(eg: &MyEGraph, wo: &VecDeque<AppliedId>, changed: &Vec<Id>) -> Vec<AppliedId> {
+    let mut v: Vec<AppliedId> = vec![];
+    let mut visited: HashMap<Id, bool> = HashMap::new();
+    for c0 in wo {
+        let res_class = rec_parents_class(eg, c0, changed, &mut visited);
+        if res_class {
+            v.push(c0.clone());
+        }
+    }
+    v
+}
+
+fn rec_parents_class(eg: &MyEGraph, c0: &AppliedId, changed: &Vec<Id>, visited: &mut HashMap<Id, bool>) -> bool {
+    let i = eg.find_id(c0.id);
+    match visited.get(&i) {
+        None => {
+            if changed.contains(&i) {
+                visited.insert(i, true);
+                return true;
+            }
+            let nodes = eg.enodes_applied(c0);
+            for n in nodes {
+                if rec_parents_nodes(eg, n, changed, visited) {
+                    visited.insert(i, true);
+                    return true;
+                }
+            }
+            visited.insert(i, false);
+            false
+        },
+        Some(b) => *b,
+    } 
+}
+
+fn rec_parents_nodes(eg: &MyEGraph, n: SimpleLang, changed: &Vec<Id>, visited: &mut HashMap<Id, bool>) -> bool {
+    match n {
+        SimpleLang::App(c1, c2) => {
+            rec_parents_class(eg, &c1, changed, visited) || rec_parents_class(eg, &c2, changed, visited)
+        },
+        _ => false,
+    }
 }
 
 pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
@@ -199,45 +315,65 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
         let visited = HashSet::with_hasher(hash_builder);
         let (mgus,_) = compute_mgus(eg, c0, &c1, &empty, &visited);
         for mu in mgus {
-            let (c_new, added_new_node) = apply_unifier_class(eg, &mu, c0);
+            let (c_new, vec_modified) = apply_unifier_class_init(eg, &mu, c0, &c1);
             eg.rebuild();
-            // satisfiability of the class tested by the analyses
-            let analysis = *eg.analysis_data(c_new.id);
-            let mut sat = true;
-            if analysis > max {
-                sat = false;
-            }
+            update(eg, wo);
+            update(eg, us);
 
-            if sat {
-                let mut subsumed = !added_new_node; // all nodes that were added were already in the e-graph and no new equality between classes has been learned
+            // satisfiability of the class tested by the analyses
+            if *eg.analysis_data(c_new.id) <= max {
+                let subsumed = vec_modified.is_empty(); // all nodes that were added were already in the e-graph and no new equality between classes has been learned
 
                 if !subsumed {
-                    for c in wo.clone() {
+                    // every e-class in wo that is modified should be deleted from wo and added to us
+                    /* for c in wo.clone() {
                         if eg.find_id(c_new.id) == eg.find_id(c.id) {
                             let reachable_parents = rec_parents(eg, &c);
-                            // wo - reachable parents
-                            // us + reachable parents
-                            todo!()
+                            for c_bis in &reachable_parents {
+                                if wo.contains(c_bis) {
+                                    delete_element(eg, wo, c_bis);
+                                    if !us.contains(&c_bis) {
+                                        us.push_back(c_bis.clone());
+                                    }
+                                }
+                            }
                         }
-                        // us = us - c
+                        delete_element(eg, us, &c); 
                         if eg.find_id(c.id) == eg.find_id(c0.id) {
                             subsumed = true;
                         }
                     }
                     if !subsumed {
+                        /* if an e-class is already in us, even if modified, it should stay in us!
                         //let mut new_subsumed = false;
                         for c in us.clone() {
                             if eg.find_id(c_new.id) == eg.find_id(c.id) {
                                 todo!()
                             } 
-                        }
+                        } */
                         if !subsumed {
                             if eg.find_id(c_new.id) == eg.find_id(c0.id) {
                                 todo!()
                             }
                         }
+                    } */
+                    let mut v = vec![];
+                    for c in vec_modified {
+                        let i = eg.find_id(c.id);
+                        if !v.contains(&i) {
+                            v.push(i);
+                        }
                     }
-                    // us = us + cnew.applied_id
+                    let reachable_parents = rec_parents(eg, wo, &v); 
+                    for rp in reachable_parents {
+                        delete_element(eg, wo, &rp);
+                        if !us.contains(&rp) {
+                            us.push_back(rp);
+                        }
+                    }
+                    if !us.contains(&c_new) {
+                        us.push_back(c_new);
+                    }
                     if subsumed {
                         return false;
                     }
