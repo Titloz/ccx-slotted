@@ -41,7 +41,7 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: 
 }
 
 
-fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
+pub(crate) fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
     // symbol_list is the list of symbols with their arity
     // wo must verify for all id i, eg.find_id(i)=i
     let analysis = *eg.analysis_data(c0.id);
