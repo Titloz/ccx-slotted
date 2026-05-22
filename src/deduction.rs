@@ -2,12 +2,13 @@ use std::collections::VecDeque;
 use crate::*;
 
 fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { 
+    println!("entry deduct_intern");
     // wo must verify for all id i, eg.find_id(i)=i
     if i!=n {
         // construct a candidate e-node
         for c in wo.clone() {
             choices.push(c); //eg.find_applied_id(&c)
-            if !deduct_intern(eg, max, wo, us, f, i, n, c0, used, choices){
+            if !deduct_intern(eg, max, wo, us, f, i+1, n, c0, used, choices){
                 choices.pop();
                 return false;
             }
@@ -55,6 +56,7 @@ pub(crate) fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u6
     for (f, n) in symbol_list {
         let mut choices = Vec::new();
         if !deduct_intern(eg, max, wo, us, f, 0, *n, c0, false, &mut choices) {
+            println!("out deduct_intern");
             delete_element(eg, wo, c0);
             return false;
         }

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::{collections::{HashMap, HashSet, VecDeque}, hash::Hash};
 use rand::prelude::*;
 use crate::*;
 use rustc_hash::FxBuildHasher;
@@ -201,12 +201,73 @@ fn apply_unifier_class_init(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, c1:
     (nc, v)
 }
 
+fn apply_unifier_class_norec(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId) -> (AppliedId, Vec<AppliedId>) {
+
+    let mut visited: HashMap<Id, AppliedId> = HashMap::new();
+    let mut in_visit: HashMap<Id, usize> = HashMap::new();
+    let mut i = eg.find_id(c0.id);
+    let mut app_id = c0;
+
+    let mut nodes = eg.enodes_applied(app_id);
+    let mut nb_nodes = nodes.len();
+    if nb_nodes == 0 {
+        visited.insert(i, c0.clone());
+        return (c0.clone(), vec![]);
+    }
+    in_visit.insert(i, 0);
+    let j = *in_visit.get(&i).unwrap(); // in that case 0
+    if j < nb_nodes -1 {
+        let _ = in_visit.insert(i, j+1);
+    }
+    let mut enode = &nodes[j];
+    let new_class = c0;
+    let v: Vec<AppliedId> = vec![];
+    let mut call_stack : Vec<AppliedId> = vec![];
+    let mut pass_first_time: bool = false;
+    while call_stack.len() > 0 || !pass_first_time { // visited.get(&c0.id) == None ?
+        pass_first_time = true;
+        match enode {
+            SimpleLang::App(c1, c2) => {
+                if !call_stack.contains(&c1) {
+                    call_stack.push(c1.clone());
+                }
+                if !call_stack.contains(&c2) {
+                    call_stack.push(c2.clone());
+                }
+            },
+            SimpleLang::Var(x) => {
+                match mu.get(&x) {
+                    None => {
+                        continue; // todo?
+                    },
+                    Some(c) => {
+                        if !call_stack.contains(&c) {
+                            call_stack.push(c.clone());
+                        }
+                    },
+                }
+            },
+            _ => {
+                continue; // todo?
+            },
+        }
+    }
+   todo!()
+}
+
 fn apply_unifier_class(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, visited: &mut HashMap<Id, AppliedId>) -> (AppliedId, Vec<AppliedId>) {
     let i = eg.find_id(c0.id);
     match visited.get(&i) {
         None => {
+            //let number_nodes = eg.classes[&c0.id].nodes.len();
             let nodes = eg.enodes_applied(c0);
-            assert_ne!(nodes.len(), 0, "empty e-class!");
+            //println!("number_nodes in class = {} and applied_nodes = {}", number_nodes, nodes.len());
+            //assert_ne!(nodes.len(), 0, "empty e-class!");
+            if nodes.len() == 0 {
+                visited.insert(i, c0.clone());
+                return (c0.clone(), vec![]);
+            }
+            println!("nodes.len() = {}", nodes.len());
             // In order to almost surely avoid being stuck in a loop, we need to pick the enode randomly each time. 
             // There must be one enode that can be applied without necessarily looping, and we are almost sure to find it.
             // Note: there might be a way to automatically get it... Maybe provide an e-class analysis that stores all nodes
@@ -256,8 +317,14 @@ fn apply_unifier_enode(eg: &mut MyEGraph, mu: &Unifier, n: SimpleLang, visited: 
         },
         SimpleLang::Var(x) => {
             match mu.get(&x) {
-                None => (eg.add(n), vec![]), 
-                Some(c) => apply_unifier_class(eg, mu, c, visited), 
+                None => {
+                    println!("just checking - None");
+                    (eg.add(n), vec![])
+                }, 
+                Some(c) => {
+                    println!("just checking");
+                    apply_unifier_class(eg, mu, c, visited)
+                }, 
             }
         },
         _ => (eg.add(n), vec![]), // nothing new is added but maybe i learn some equalities about e-classes
@@ -308,22 +375,22 @@ fn rec_parents_nodes(eg: &MyEGraph, n: SimpleLang, changed: &Vec<Id>, visited: &
 }
 
 pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
-    for c1 in wo.clone() {
+    let w1 = wo.clone();
+    for c1 in w1 {
         // quite unsure about this beginning
-        let hash_builder = rustc_hash::FxBuildHasher::from(FxBuildHasher {});
+        //let hash_builder = rustc_hash::FxBuildHasher::from(FxBuildHasher {});
         let empty = HashMap::new();
-        let visited = HashSet::with_hasher(hash_builder);
+        let visited = HashSet::new();//with_hasher(hash_builder);
         let (mgus,_) = compute_mgus(eg, c0, &c1, &empty, &visited);
         for mu in mgus {
             let (c_new, vec_modified) = apply_unifier_class_init(eg, &mu, c0, &c1);
             eg.rebuild();
             update(eg, wo);
             update(eg, us);
-
             // satisfiability of the class tested by the analyses
             if *eg.analysis_data(c_new.id) <= max {
                 let subsumed = vec_modified.is_empty(); // all nodes that were added were already in the e-graph and no new equality between classes has been learned
-
+                // porbably an error here: it does not seem to reach
                 if !subsumed {
                     // every e-class in wo that is modified should be deleted from wo and added to us
                     /* for c in wo.clone() {

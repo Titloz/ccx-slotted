@@ -15,3 +15,5 @@ impl<L:Language> Analysis<L> for AstSizeAnalysis {
         min(l, r)
     }
 }
+
+// maybe make an analysis for my language which does not count app nodes?

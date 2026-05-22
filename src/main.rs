@@ -40,7 +40,7 @@ fn to_equations(eqs: Vec<String>) -> Vec<Equation> {
     v
 }
 
-fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>) -> MyEGraph {
+fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterations: u64) -> MyEGraph {
     // initialization
     let analysis = AstSizeAnalysis;
     let mut eg = MyEGraph::new(analysis);
@@ -54,10 +54,9 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>) -> MyEGrap
         eg.union(&cl, &cr);
         us.push_back(cl);
     }
-
     // add single-deduction classes
     for (f, n) in symbol_list {
-        let mut str = format!("?{}", f.clone());
+        let mut str = format!("{}", f.clone());
         for i in 0..(*n) {
             str = format!("(app {} (var $var_{}))", str, i);
         }
@@ -65,34 +64,47 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>) -> MyEGrap
         let cf = eg.add_syn_expr(re);
         wo.push_back(cf);
     }
-
     // rebuild
     eg.rebuild();
     update(&eg, &mut wo);
     update(&eg, &mut us);
 
     // main loop
-    while !us.is_empty() {
+    let mut iterations = 0;
+    while !us.is_empty() && iterations < max_iterations {
+        iterations += 1;
         let c = us.pop_front().unwrap();
-        if merge(&mut eg, max, &mut wo, &mut us, &c) && deduct(&mut eg, symbol_list, max, &mut wo, &mut us, &c) {
-            if deduct(&mut eg, symbol_list, max, &mut wo, &mut us, &c) {
-                let cfind = eg.find_applied_id(&c);
-                if !wo.contains(&cfind) {
-                    wo.push_back(cfind);
+        if !wo.contains(&c) {
+            println!("enter merge");
+            if merge(&mut eg, max, &mut wo, &mut us, &c) {
+                println!("enter deduct");
+                if deduct(&mut eg, symbol_list, max, &mut wo, &mut us, &c) {
+                    let cfind = eg.find_applied_id(&c);
+                    if !wo.contains(&cfind) {
+                        wo.push_back(cfind);
+                    }
                 }
             }
         }
     }
-    
+    println!("wo = ");
+    for i in wo.clone() {
+        println!("{:?}", i);
+    }
+    println!("us = ");
+    for i in us.clone() {
+        println!("{:?}", i);
+    }
     return eg;
 }
 
 fn main() {
     let max = 6;
-    let symbol_list: Vec<(String, u8)> = vec![("g".to_owned(), 1), ("h".to_owned(), 1), ("a".to_owned(), 0)];
-    let eqs: Vec<String> = vec!["(app ?g $x) = ?a".to_owned(), "(app ?h $y) = a".to_owned(), "(app ?g (app ?h $z)) = (app ?h (app ?h $z))".to_owned()];
+    let max_iterations = 10;
+    let symbol_list: Vec<(String, u8)> = vec![("g".to_owned(), 1), ("h".to_owned(), 1), ("a".to_owned(), 0), ("f".to_owned(), 1), ("b".to_owned(), 0)];
+    let eqs: Vec<String> = vec!["(app g (var $x)) = (app h (var $x))".to_owned(), 
+                                "(app h (app h (var $y))) = (app f (app h (var $y)))".to_owned()];
     let parsed_eqs = to_equations(eqs);
-
-    let eg = ccx(parsed_eqs, max, &symbol_list);
+    let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     eg.dump();
 }
