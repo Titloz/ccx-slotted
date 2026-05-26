@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use crate::*;
 
 fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { 
-    println!("entry deduct_intern");
+    //println!("entry deduct_intern");
     // wo must verify for all id i, eg.find_id(i)=i
     if i!=n {
         // construct a candidate e-node

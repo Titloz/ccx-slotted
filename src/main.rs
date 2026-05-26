@@ -99,11 +99,10 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
 }
 
 fn main() {
-    let max = 6;
+    let max = 10;
     let max_iterations = 10;
-    let symbol_list: Vec<(String, u8)> = vec![("g".to_owned(), 1), ("h".to_owned(), 1), ("a".to_owned(), 0), ("f".to_owned(), 1), ("b".to_owned(), 0)];
-    let eqs: Vec<String> = vec!["(app g (var $x)) = (app h (var $x))".to_owned(), 
-                                "(app h (app h (var $y))) = (app f (app h (var $y)))".to_owned()];
+    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 1), ("g".to_owned(), 1)];
+    let eqs: Vec<String> = vec!["(app f (var $x)) = (app g (var $x))".to_owned()];
     let parsed_eqs = to_equations(eqs);
     let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     eg.dump();

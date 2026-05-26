@@ -1,7 +1,7 @@
-use std::{collections::{HashMap, HashSet, VecDeque}, hash::Hash};
+use std::{collections::{HashMap, HashSet, VecDeque}}; // , hash::Hash
 use rand::prelude::*;
 use crate::*;
-use rustc_hash::FxBuildHasher;
+//use rustc_hash::FxBuildHasher;
 
 pub(crate) type Unifier = HashMap<Slot, AppliedId>;
 
@@ -185,74 +185,299 @@ fn occ(mu: &Unifier, c: &AppliedId, v: &Slot) -> bool { //_eg: &MyEGraph,
 }
 
 fn apply_unifier_class_init(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, c1: &AppliedId) -> (AppliedId, Vec<AppliedId>) {
-    let mut visited: HashMap<Id, AppliedId> = HashMap::new();
-    let (nc0, v0) = apply_unifier_class(eg, mu, c0, &mut visited);
-    let (nc1, v1) = apply_unifier_class(eg, mu, c1, &mut visited);
+    let mut visited: HashMap<Id, (AppliedId, bool)> = HashMap::new();
+    let (nc0, v0) = apply_unifier_class_norec(eg, mu, c0, &mut visited);
+    let (nc1, v1) = apply_unifier_class_norec(eg, mu, c1, &mut visited);
     let mut v = v0;
     for c in v1 {
         if !v.contains(&c) {
             v.push(c);
         }
     }
-    let nc = eg.find_applied_id(&nc0);
+    let nc_id = eg.find_id(nc0.id);
+    let nc : AppliedId = eg.mk_identity_applied_id(nc_id); // or just let nc = eg.find_applied_id(nc0) ?
     if eg.union(&nc0, &nc1) {
         v.push(nc.clone());
     }
     (nc, v)
 }
 
-fn apply_unifier_class_norec(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId) -> (AppliedId, Vec<AppliedId>) {
-
-    let mut visited: HashMap<Id, AppliedId> = HashMap::new();
+fn apply_unifier_class_norec(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, visited: &mut HashMap<Id, (AppliedId, bool)>) -> (AppliedId, Vec<AppliedId>) {
+    println!("mu = {:?}", mu);
+    println!("id = {:?}", c0.id);
+    println!("slots = {:?}", c0.slots());
+    // my feeling is that this Vec<AppliedId> thing is not useful.
+    //let mut visited: HashMap<Id, (AppliedId, bool)> = HashMap::new();
     let mut in_visit: HashMap<Id, usize> = HashMap::new();
-    let mut i = eg.find_id(c0.id);
-    let mut app_id = c0;
+    let mut i;
+    let mut app_id;
 
-    let mut nodes = eg.enodes_applied(app_id);
-    let mut nb_nodes = nodes.len();
-    if nb_nodes == 0 {
-        visited.insert(i, c0.clone());
-        return (c0.clone(), vec![]);
-    }
-    in_visit.insert(i, 0);
-    let j = *in_visit.get(&i).unwrap(); // in that case 0
-    if j < nb_nodes -1 {
-        let _ = in_visit.insert(i, j+1);
-    }
-    let mut enode = &nodes[j];
-    let new_class = c0;
-    let v: Vec<AppliedId> = vec![];
-    let mut call_stack : Vec<AppliedId> = vec![];
-    let mut pass_first_time: bool = false;
-    while call_stack.len() > 0 || !pass_first_time { // visited.get(&c0.id) == None ?
-        pass_first_time = true;
-        match enode {
-            SimpleLang::App(c1, c2) => {
-                if !call_stack.contains(&c1) {
-                    call_stack.push(c1.clone());
+    let mut nodes;
+    let mut nb_nodes;
+    let mut j;
+    let mut enode;
+    let mut new_class = c0.clone();
+    let mut v: Vec<AppliedId> = vec![];
+    let mut call_stack : Vec<AppliedId> = vec![c0.clone()];
+    let mut success_left;
+    let mut success;
+    let mut has_unioned;
+    let mut counter = 0;
+    'loopw: while visited.get(&eg.find_id(c0.id)) == None && counter < 20 { // && !call_stack.is_empty() 
+        print!("call_stack = [");
+        for el in call_stack.clone() {
+            let id = el.id;
+            print!("{:?};", id);
+        }
+        print!("]\n"); 
+        /*if call_stack.is_empty() {
+            println!("no call stack");
+            call_stack.push(c0.clone());
+        }*/
+        counter += 1;
+        app_id = call_stack.pop().unwrap();
+        i = eg.find_id(app_id.id);
+        success = false;
+        has_unioned = false;
+
+        let mut not_fully_applied = false;
+        for y in mu.keys() {
+            for z in app_id.slots() {
+                if *y==z {
+                    not_fully_applied = true;
                 }
-                if !call_stack.contains(&c2) {
-                    call_stack.push(c2.clone());
-                }
-            },
-            SimpleLang::Var(x) => {
-                match mu.get(&x) {
+            }
+        }
+        if !not_fully_applied {
+            visited.insert(i, (app_id.clone(), true));
+            continue 'loopw;
+        }
+
+        match visited.get(&i) {
+            None => {
+                match in_visit.get(&i) {
                     None => {
-                        continue; // todo?
+                        j = 0;
+                        let _ = in_visit.insert(i, 0);
                     },
-                    Some(c) => {
-                        if !call_stack.contains(&c) {
-                            call_stack.push(c.clone());
+                    Some(k) => {
+                        j = *k;
+                    }
+                }
+                nodes = eg.enodes_applied(&app_id);
+                nb_nodes = nodes.len();
+                if nb_nodes == 0 {
+                    visited.insert(i, (app_id.clone(), true));
+                    new_class = app_id;
+                    continue 'loopw;
+                }
+                //if j < nb_nodes - 1 {
+                //    let _ = in_visit.insert(i, j+1);
+                //}
+                enode = &nodes[j];
+                success_left = false;
+                match enode {
+                    SimpleLang::App(c1, c2) => {
+                        match visited.get(&eg.find_id(c1.id)) {
+                            None => {
+                                call_stack.push(app_id.clone());
+                                call_stack.push(c1.clone());
+                            },
+                            Some((resc1, _vc1)) => {
+                                new_class = resc1.clone();
+                                success_left = true;
+                            },
+                        }
+                        match visited.get(&eg.find_id(c2.id)) {
+                            None => {
+                                if success_left {
+                                    call_stack.push(app_id.clone());
+                                }
+                                call_stack.push(c2.clone());
+                            },
+                            Some((resc2, _vc2)) => {
+                                if success_left {
+                                    new_class = eg.add(SimpleLang::App(new_class.clone(), resc2.clone()));
+                                    visited.insert(i,(new_class.clone(), false));
+                                    success = true;
+                                }
+                            }
                         }
                     },
+                    SimpleLang::Var(x) => {
+                        match mu.get(x) {
+                            None => {
+                                println!("none case");
+                                new_class = eg.add(enode.clone());
+                                visited.insert(i, (new_class.clone(), false));
+                                success = true;
+                            },
+                            Some(c) => {
+                                // what is the sound behavior?
+                                // 1) (and do I have to change the variables here?)
+                                // note: this can only be sound if c does not contain any variable in the domain of mu
+                                // it does not sound true if mu is "triangular"
+                                //new_class = c.clone();
+                                //visited.insert(i, (new_class.clone(), v.clone()));
+                                //success = true;
+                                // or 2) (same question) + looks very inefficient... is this really the right option?
+                                println!("some case");
+                                /*let mut not_fully_applied = false;
+                                for y in mu.keys() {
+                                    for z in c.slots() {
+                                        if *y==z { // z!=*x
+                                            not_fully_applied = true;
+                                        }
+                                    }
+                                }
+                                if !not_fully_applied {
+                                    visited.insert(eg.find_id(c.id), (c.clone(), true));
+                                } else if !call_stack.contains(&c) {
+                                    call_stack.push(c.clone());
+                                }*/
+                                new_class = c.clone();
+                                visited.insert(i, (new_class.clone(), true));
+                            },
+                        }
+                    },
+                    _ => {
+                        new_class = eg.add(enode.clone());
+                        visited.insert(i, (new_class.clone(), false));
+                        success = true;
+                    },
+                }
+                if success {
+                    let mut class_n;
+                    let mut left_class;
+                    for n in nodes {
+                        match n {
+                            SimpleLang::App(c1, c2) => {
+                                match visited.get(&eg.find_id(c1.id)) {
+                                    None => {
+                                        call_stack.push(app_id);
+                                        call_stack.push(c1.clone());
+                                        continue 'loopw;
+                                    },
+                                    Some((c11,_)) => {
+                                        left_class = c11.clone();
+                                    },
+                                }
+                                match visited.get(&eg.find_id(c2.id)) {
+                                    None => {
+                                        call_stack.push(app_id);
+                                        call_stack.push(c2.clone());
+                                        continue 'loopw;
+                                    },
+                                    Some((c22,_)) => {
+                                        class_n = eg.add(SimpleLang::App(left_class, c22.clone()));
+                                    }
+                                }
+                            },
+                            SimpleLang::Var(x) => {
+                                match mu.get(&x) {
+                                    None => {
+                                        class_n = eg.add(n.clone());
+                                    },
+                                    Some(c) => {
+                                        /*match visited.get(&eg.find_id(c.id)) {
+                                            None => {
+                                                call_stack.push(app_id);
+                                                call_stack.push(c.clone());
+                                                continue 'loopw;
+                                            }, // we can not have all equalities 
+                                            Some((cnew, _)) => class_n = cnew.clone(), 
+                                        }*/
+                                        // TEMPORARY?
+                                        class_n = c.clone();
+                                    },
+                                }
+                            },
+                            _ => {
+                                class_n = eg.add(n.clone());
+                            }
+                        }
+                        if eg.union(&new_class, &class_n) {
+                            has_unioned = true;
+                        }
+                    }
+                    if has_unioned && !v.contains(&new_class) {
+                        v.push(new_class.clone());
+                    }
+                    visited.insert(i, (new_class.clone(), true));
+                } else {
+                    if j < nb_nodes - 1 {
+                        let _ = in_visit.insert(i, j+1);
+                    } else {
+                        let _ = in_visit.insert(i, 0); // cyclic behavior
+                    }
+                    continue 'loopw; 
                 }
             },
-            _ => {
-                continue; // todo?
+            Some((nc, nv)) => {
+                new_class = nc.clone();
+                if !(*nv) {
+                    let mut class_n;
+                    let mut left_class;
+                    let nodes = eg.enodes_applied(&app_id);
+                    for n in nodes {
+                        match n {
+                            SimpleLang::App(c1, c2) => {
+                                match visited.get(&eg.find_id(c1.id)) {
+                                    None => {
+                                        call_stack.push(app_id);
+                                        call_stack.push(c1.clone());
+                                        continue 'loopw;
+                                    },
+                                    Some((c11,_)) => {
+                                        left_class = c11.clone();
+                                    },
+                                }
+                                match visited.get(&eg.find_id(c2.id)) {
+                                    None => {
+                                        call_stack.push(app_id);
+                                        call_stack.push(c2.clone());
+                                        continue 'loopw;
+                                    },
+                                    Some((c22,_)) => {
+                                        class_n = eg.add(SimpleLang::App(left_class, c22.clone()));
+                                    }
+                                }
+                            },
+                            SimpleLang::Var(x) => {
+                                match mu.get(&x) {
+                                    None => {
+                                        class_n = eg.add(n.clone());
+                                    },
+                                    Some(c) => {
+                                        match visited.get(&eg.find_id(c.id)) {
+                                            None => {
+                                                call_stack.push(app_id);
+                                                call_stack.push(c.clone());
+                                                continue 'loopw;
+                                            }, // we can not have all equalities 
+                                            Some((cnew, _)) => class_n = cnew.clone(), 
+                                        }
+                                    },
+                                }
+                            },
+                            _ => {
+                                class_n = eg.add(n.clone());
+                            },
+                        }
+                        if eg.union(&new_class, &class_n) {
+                            has_unioned = true;
+                        }
+                    }
+                    if has_unioned && !v.contains(&new_class) {
+                        v.push(new_class.clone());
+                    }
+                    visited.insert(i, (new_class.clone(), true));
+                }
             },
         }
     }
-   todo!()
+   let (c, _) = visited.get(&eg.find_id(c0.id)).unwrap();
+   return (c.clone(), v)
 }
 
 fn apply_unifier_class(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, visited: &mut HashMap<Id, AppliedId>) -> (AppliedId, Vec<AppliedId>) {
