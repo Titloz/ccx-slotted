@@ -68,21 +68,23 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
     eg.rebuild();
     update(&eg, &mut wo);
     update(&eg, &mut us);
-
+    wo_no_us(&mut wo, &us);
+    println!("{:?}", wo);
+    println!("{:?}", us);
     // main loop
     let mut iterations = 0;
-    while !us.is_empty() && iterations < max_iterations {
+    while !us.is_empty() && iterations < max_iterations { //&& iterations < max_iterations
         iterations += 1;
         let c = us.pop_front().unwrap();
-        if !wo.contains(&c) {
-            println!("enter merge");
-            if merge(&mut eg, max, &mut wo, &mut us, &c) {
-                println!("enter deduct");
-                if deduct(&mut eg, symbol_list, max, &mut wo, &mut us, &c) {
-                    let cfind = eg.find_applied_id(&c);
-                    if !wo.contains(&cfind) {
-                        wo.push_back(cfind);
-                    }
+        println!("enter merge");
+        if merge(&mut eg, max, &mut wo, &mut us, &c) {
+            println!("enter deduct");
+            println!("{:?}", wo); 
+            println!("{:?}", us);
+            if deduct(&mut eg, symbol_list, max, &mut wo, &mut us, &c) {
+                let cfind = eg.find_applied_id(&c);
+                if !wo.contains(&cfind) {
+                    wo.push_back(cfind);
                 }
             }
         }
@@ -95,14 +97,16 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
     for i in us.clone() {
         println!("{:?}", i);
     }
+    println!("iterations = {}", iterations);
     return eg;
 }
 
 fn main() {
     let max = 10;
-    let max_iterations = 10;
-    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 1), ("g".to_owned(), 1)];
-    let eqs: Vec<String> = vec!["(app f (var $x)) = (app g (var $x))".to_owned()];
+    let max_iterations = 50;
+    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 2), ("g".to_owned(), 2)];
+    let eqs: Vec<String> = vec!["(app (app f (var $x)) (var $y)) = (app (app g (var $x)) (var $y))".to_owned(),
+                                "(app (app f (var $x)) (var $y)) = (app (app g (var $y)) (var $x))".to_owned()];
     let parsed_eqs = to_equations(eqs);
     let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     eg.dump();

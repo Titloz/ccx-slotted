@@ -12,4 +12,10 @@ fn test0() {
 fn test2() {
     let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 1), ("g".to_owned(), 1)];
     let eqs: Vec<String> = vec!["(app f (var $x)) = (app g (var $x))".to_owned()];
-}
+} // OK
+
+fn test3() {
+    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 2), ("g".to_owned(), 2)];
+    let eqs: Vec<String> = vec!["(app (app f (var $x)) (var $y)) = (app (app g (var $x)) (var $y))".to_owned(),
+                                "(app (app f (var $x)) (var $y)) = (app (app g (var $y)) (var $x))".to_owned()];
+} // OK

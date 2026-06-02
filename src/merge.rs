@@ -194,8 +194,9 @@ fn apply_unifier_class_init(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, c1:
             v.push(c);
         }
     }
-    let nc_id = eg.find_id(nc0.id);
-    let nc : AppliedId = eg.mk_identity_applied_id(nc_id); // or just let nc = eg.find_applied_id(nc0) ?
+    //let nc_id = eg.find_id(nc0.id);
+    //let nc : AppliedId = eg.mk_identity_applied_id(nc_id); // or just let nc = eg.find_applied_id(&nc0) ?
+    let nc = eg.find_applied_id(&nc0);
     if eg.union(&nc0, &nc1) {
         v.push(nc.clone());
     }
@@ -222,19 +223,19 @@ fn apply_unifier_class_norec(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, vi
     let mut success_left;
     let mut success;
     let mut has_unioned;
-    let mut counter = 0;
-    'loopw: while visited.get(&eg.find_id(c0.id)) == None && counter < 20 { // && !call_stack.is_empty() 
-        print!("call_stack = [");
+    //let mut counter = 0;
+    'loopw: while visited.get(&eg.find_id(c0.id)) == None { // && !call_stack.is_empty()         && counter < 20 
+        /*print!("call_stack = [");
         for el in call_stack.clone() {
             let id = el.id;
             print!("{:?};", id);
         }
-        print!("]\n"); 
+        print!("]\n"); */
         /*if call_stack.is_empty() {
             println!("no call stack");
             call_stack.push(c0.clone());
         }*/
-        counter += 1;
+        //counter += 1;
         app_id = call_stack.pop().unwrap();
         i = eg.find_id(app_id.id);
         success = false;
@@ -321,7 +322,7 @@ fn apply_unifier_class_norec(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, vi
                                 //visited.insert(i, (new_class.clone(), v.clone()));
                                 //success = true;
                                 // or 2) (same question) + looks very inefficient... is this really the right option?
-                                println!("some case");
+                                //println!("some case");
                                 /*let mut not_fully_applied = false;
                                 for y in mu.keys() {
                                     for z in c.slots() {
@@ -476,8 +477,8 @@ fn apply_unifier_class_norec(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, vi
             },
         }
     }
-   let (c, _) = visited.get(&eg.find_id(c0.id)).unwrap();
-   return (c.clone(), v)
+    let (c, _) = visited.get(&eg.find_id(c0.id)).unwrap();
+    return (c.clone(), v)
 }
 
 fn apply_unifier_class(eg: &mut MyEGraph, mu: &Unifier, c0: &AppliedId, visited: &mut HashMap<Id, AppliedId>) -> (AppliedId, Vec<AppliedId>) {
@@ -608,10 +609,16 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
         let visited = HashSet::new();//with_hasher(hash_builder);
         let (mgus,_) = compute_mgus(eg, c0, &c1, &empty, &visited);
         for mu in mgus {
+            println!("there is a mu");
             let (c_new, vec_modified) = apply_unifier_class_init(eg, &mu, c0, &c1);
             eg.rebuild();
+            println!("merge - wo = {:?}", wo);
+            println!("merge - us = {:?}", us);
             update(eg, wo);
             update(eg, us);
+            println!("merge 2 - wo = {:?}", wo);
+            println!("merge 2 - us = {:?}", us);
+            //wo_no_us(wo, us);
             // satisfiability of the class tested by the analyses
             if *eg.analysis_data(c_new.id) <= max {
                 let subsumed = vec_modified.is_empty(); // all nodes that were added were already in the e-graph and no new equality between classes has been learned
@@ -666,7 +673,7 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
                     if !us.contains(&c_new) {
                         us.push_back(c_new);
                     }
-                    if subsumed {
+                    if subsumed { // as of now, unreachable
                         return false;
                     }
                 }
