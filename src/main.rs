@@ -26,6 +26,9 @@ pub use run::*;
 mod runner;
 pub use runner::*;
 
+mod tptp_ueq; 
+pub use tptp_ueq::*;
+
 pub type MyEGraph = EGraph<SimpleLang, SizeAnalysisNoApp>;
 
 struct Equation {
