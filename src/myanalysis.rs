@@ -1,5 +1,7 @@
 use std::cmp::min;
 use crate::*;
+
+#[derive(Default)]
 pub struct AstSizeAnalysis;
 
 impl<L:Language> Analysis<L> for AstSizeAnalysis {
@@ -17,3 +19,23 @@ impl<L:Language> Analysis<L> for AstSizeAnalysis {
 }
 
 // maybe make an analysis for my language which does not count app nodes?
+
+#[derive(Default)]
+pub struct SizeAnalysisNoApp;
+
+impl Analysis<SimpleLang> for SizeAnalysisNoApp {
+    type Data = u64;
+    fn make(eg: &EGraph<SimpleLang, Self>, enode: &SimpleLang) -> Self::Data {
+        let mut s: u64 = match enode {
+            SimpleLang::App(_, _) => 0,
+            _ => 1,
+        };
+        for x in enode.applied_id_occurrences(){
+            s = s.saturating_add(*eg.analysis_data(x.id));
+        }
+        s
+    }
+    fn merge(l: Self::Data, r: Self::Data) -> Self::Data {
+        min(l,r)
+    }
+}

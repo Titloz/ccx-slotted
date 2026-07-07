@@ -17,7 +17,16 @@ pub(crate) use merge::*;
 mod deduction;
 pub(crate) use deduction::*;
 
-pub type MyEGraph = EGraph<SimpleLang, AstSizeAnalysis>;
+mod report;
+pub use report::*;
+
+mod run;
+pub use run::*;
+
+mod runner;
+pub use runner::*;
+
+pub type MyEGraph = EGraph<SimpleLang, SizeAnalysisNoApp>;
 
 struct Equation {
     pub l: RecExpr<SimpleLang>,
@@ -40,9 +49,22 @@ fn to_equations(eqs: Vec<String>) -> Vec<Equation> {
     v
 }
 
+pub fn ccx_step(eg: &mut MyEGraph, max: u64, symbol_list: &Vec<(String, u8)>, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>) -> bool {
+    let c = us.pop_front().unwrap();
+    if merge(eg, max, wo, us, &c) {
+        if deduct(eg, symbol_list, max, wo, us, &c) {
+            let cfind = eg.find_applied_id(&c);
+            if !wo.contains(&cfind) {
+                wo.push_back(cfind);
+            }
+        }
+    }
+    return us.is_empty()
+}
+
 fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterations: u64) -> MyEGraph {
     // initialization
-    let analysis = AstSizeAnalysis;
+    let analysis = SizeAnalysisNoApp;
     let mut eg = MyEGraph::new(analysis);
     let mut wo: VecDeque<AppliedId> = VecDeque::new();
     let mut us: VecDeque<AppliedId> = VecDeque::new();
@@ -75,7 +97,7 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
     let mut iterations = 0;
     while !us.is_empty() && iterations < max_iterations { //&& iterations < max_iterations
         iterations += 1;
-        let c = us.pop_front().unwrap();
+        /* let c = us.pop_front().unwrap();
         println!("enter merge");
         if merge(&mut eg, max, &mut wo, &mut us, &c) {
             println!("enter deduct");
@@ -87,7 +109,8 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
                     wo.push_back(cfind);
                 }
             }
-        }
+        } */
+       ccx_step(&mut eg, max, symbol_list, &mut wo, &mut us);
     }
     println!("wo = ");
     for i in wo.clone() {
