@@ -47,7 +47,7 @@ impl RunnerLimits {
         let elapsed = self.start_time.unwrap().elapsed();
         if iteration > self.iter_limit {
             Err(CCXStopReason::IterationLimit)
-        } else if eg.total_number_of_nodes() > self.node_limit {
+        } else if get_all_nodes(eg) > self.node_limit { // eg.total_number_of_nodes() > self.node_limit
             Err(CCXStopReason::NodeLimit)
         } else if elapsed > self.time_limit {
             Err(CCXStopReason::TimeLimit)
@@ -139,17 +139,21 @@ where
     }
 
     pub fn run(&mut self) -> CCXReport<CustomErrorT> {
+        println!("run - entry");
+        let mut n = 0;
         loop {
+            println!("run - loop {n}");
             if let Some(_) = self.stop_reason {
                 break;
             }
             let iter = self.run_one(); //self.run_one(rewrites);
             self.iterations.push(iter);
+            n += 1;
         }
         CCXReport {
             iterations: self.iterations.len(),
             stop_reason: self.stop_reason.clone().unwrap(),
-            egraph_nodes: self.egraph.total_number_of_nodes(),
+            egraph_nodes: get_all_nodes(&self.egraph), // self.egraph.total_number_of_nodes(),
             egraph_classes: self.egraph.classes.len(),
             total_time: self
                 .iterations
@@ -163,6 +167,7 @@ where
     }
 
     fn run_one(&mut self) -> Iteration<IterData> {
+        println!("run_one - entry");
         assert!(self.stop_reason.is_none());
 
         // if the runner has not started, start the timer
@@ -170,9 +175,10 @@ where
         let mut hooks = std::mem::take(&mut self.hooks);
 
         let mut result: Result<(), CCXStopReason<CustomErrorT>> = Ok(());
-
+        println!("run_one - before ccx_step");
         // Do one step, then check hooks, then check limits, then check if saturated.
         let us_empty = ccx_step(&mut self.egraph, self.max, &self.symbol_list, &mut self.wo, &mut self.us);  //apply_rewrites(&mut self.egraph, rewrites); 
+        println!("run_one - after ccx_step");
         result = result
             .and_then(|_| {
                 hooks
@@ -189,6 +195,7 @@ where
             self.stop_reason = Some(stop_reason);
         }
         self.hooks = hooks;
+        println!("run_one - end");
         Iteration {
             data: IterData::make(self),
             num_nodes: self.egraph.total_number_of_nodes(),

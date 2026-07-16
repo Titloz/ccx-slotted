@@ -43,3 +43,13 @@ pub(crate) fn wo_no_us(wo: &mut VecDeque<AppliedId>, us: &VecDeque<AppliedId>)  
     }
     *wo = new_w0;
 }
+
+pub(crate) fn get_all_nodes(eg: &MyEGraph) -> usize {
+    let mut sum = 0;
+    for (_, c) in eg.classes.iter().clone() {
+        for _ in c.nodes.clone() {
+            sum += 1;
+        }
+    }
+    sum
+}

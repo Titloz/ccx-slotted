@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::time::Duration;
 
 pub use slotted_egraphs::*;
 
@@ -53,9 +54,13 @@ fn to_equations(eqs: Vec<String>) -> Vec<Equation> {
 }
 
 pub fn ccx_step(eg: &mut MyEGraph, max: u64, symbol_list: &Vec<(String, u8)>, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>) -> bool {
+    //println!("ccx_step - entry");
     let c = us.pop_front().unwrap();
+    println!("ccx_step - before merge");
     if merge(eg, max, wo, us, &c) {
+        println!("ccx_step - after merge and before deduct");
         if deduct(eg, symbol_list, max, wo, us, &c) {
+            println!("ccx_step - after deduct");
             let cfind = eg.find_applied_id(&c);
             if !wo.contains(&cfind) {
                 wo.push_back(cfind);
@@ -94,8 +99,8 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
     update(&eg, &mut wo);
     update(&eg, &mut us);
     wo_no_us(&mut wo, &us);
-    println!("{:?}", wo);
-    println!("{:?}", us);
+    //println!("{:?}", wo);
+    //println!("{:?}", us);
     // main loop
     let mut iterations = 0;
     while !us.is_empty() && iterations < max_iterations { //&& iterations < max_iterations
@@ -115,19 +120,20 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
         } */
        ccx_step(&mut eg, max, symbol_list, &mut wo, &mut us);
     }
-    println!("wo = ");
+    //println!("wo = ");
     for i in wo.clone() {
-        println!("{:?}", i);
+        //println!("{:?}", i);
     }
-    println!("us = ");
+    //println!("us = ");
     for i in us.clone() {
-        println!("{:?}", i);
+        //println!("{:?}", i);
     }
-    println!("iterations = {}", iterations);
+    //println!("iterations = {}", iterations);
     return eg;
 }
 
 fn main() {
+    /* 
     let max = 10;
     let max_iterations = 50;
     let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 2), ("g".to_owned(), 2)];
@@ -136,4 +142,16 @@ fn main() {
     let parsed_eqs = to_equations(eqs);
     let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     eg.dump();
+    */
+    /*let res = run_tptp_ueq("../tests/TPTP/TPTP/Problems/UEQ/GRP170-3.p", false);
+    match res {
+        Ok(pair) => {
+            let (report, egraph) = pair;
+            println!("{:?}", report);
+            egraph.dump();
+        },
+        Err(x) => println!("error {x}"),
+    }*/
+    let config = UeqRunConfig { max_size: 10, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(30), worker_stack_bytes: 100000000 };
+    let _ = run_ueq_folder("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality.csv", false, config);
 }
