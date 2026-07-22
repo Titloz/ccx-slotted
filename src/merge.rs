@@ -1648,6 +1648,7 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::Cell;
+use std::todo;
 
 use crate::*;
 //use rustc_hash::FxBuildHasher;
@@ -1987,28 +1988,6 @@ fn compute_mgus(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, memo:
     return l;
 }
 
-/* 
-fn dec_case(eg: &MyEGraph, equalities: &mut Vec<(&AppliedId, &AppliedId)>, pairs: Vec<(Unifier, HashSet<(AppliedId, AppliedId)>)>)
-    -> Vec<(Unifier, HashSet<(AppliedId, AppliedId)>)> {
-    if equalities.len() == 0 {
-        let mut pairs_cp = Vec::new();
-        for (mu, v) in pairs {
-            pairs_cp.push((mu.clone(), v.clone()));
-        }
-        return pairs_cp;
-    }
-    let (c,c_bis) = equalities.pop().unwrap();
-    let mut l = Vec::new();
-    for (mu, visited) in pairs {
-        let (res, v_bis) = compute_mgus(eg, c, c_bis, &mu, &visited);
-        for el in res {
-            l.push((el, v_bis.clone()));
-        }
-    }
-    return dec_case(eg, equalities, l);
-}
-*/
-
 fn occ(mu: &Unifier, c: &AppliedId, v: &Slot) -> bool { //_eg: &MyEGraph, 
     for x in c.slots() {
         match mu.get(&x) {
@@ -2021,6 +2000,178 @@ fn occ(mu: &Unifier, c: &AppliedId, v: &Slot) -> bool { //_eg: &MyEGraph,
         }
     }
     return false;
+}
+
+
+fn compute_mgus_extern(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) -> Vec<Unifier> {
+    // extract one term per enode for both classes
+    let mut a_terms: Vec<RecExpr<SimpleLang>> = vec![];
+    let mut b_terms: Vec<RecExpr<SimpleLang>> = vec![];
+    let extractor: Extractor<SimpleLang, AstSizeCostNoApp> = Extractor::new(eg, AstSizeCostNoApp);
+    for na in eg.enodes_applied(a) {
+        match na.clone() {
+            SimpleLang::App(c,d) => {
+                let tc = extractor.extract(&c, eg);
+                let td = extractor.extract(&d, eg);
+                let out: RecExpr<SimpleLang> = RecExpr { node: SimpleLang::App(AppliedId::null(), AppliedId::null()),
+                     children: [tc, td].into()
+                };
+                a_terms.push(out);
+            },
+            _ => {
+                let out = RecExpr {node: na.clone(), children: vec![]};
+                a_terms.push(out);
+            },
+        }
+    }
+    for nb in eg.enodes_applied(b) {
+        match nb.clone() {
+            SimpleLang::App(c,d) => {
+                let tc = extractor.extract(&c, eg);
+                let td = extractor.extract(&d, eg);
+                let out: RecExpr<SimpleLang> = RecExpr { node: SimpleLang::App(AppliedId::null(), AppliedId::null()),
+                     children: [tc, td].into()
+                };
+                b_terms.push(out);
+            },
+            _ => {
+                let out = RecExpr {node: nb.clone(), children: vec![]};
+                b_terms.push(out);
+            },
+        }
+    }
+    // directly compute mgus between terms
+    let mut out : Vec<Unifier> = vec![];
+    for ta in a_terms {
+        for tb in b_terms.clone() {
+            if let Some(mu) = compute_mgu_terms(eg, &ta, &tb) {
+                if !out.contains(&mu) {
+                    out.push(mu);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn compute_mgu_terms(eg: &mut MyEGraph, t: &RecExpr<SimpleLang>, s: &RecExpr<SimpleLang>) -> Option<Unifier> {
+    let mut mu = Unifier::new();
+    //let mut mu_terms:HashMap<Slot,RecExpr<SimpleLang>> = HashMap::new();
+    let mut mu_terms: Vec<(Slot, RecExpr<SimpleLang>)> = vec![];
+    let mut equalities = vec![(t.clone(), s.clone())];
+    while !equalities.is_empty() {
+        let (t, s) = equalities.pop()?;
+        match (t.node.clone(), s.node.clone()) {
+            (SimpleLang::App(_,_), SimpleLang::App(_,_)) => { // Dec
+                let tc = t.children.clone();
+                let sc = s.children.clone();
+                assert_eq!(tc.len(), sc.len());
+                let eq0 = (tc[0].clone(), sc[0].clone());
+                let eq1 = (tc[1].clone(), sc[1].clone());
+                equalities.push(eq0);
+                equalities.push(eq1);
+            },
+            (SimpleLang::Symbol(f), SimpleLang::Symbol(g)) => {
+                if f==g { // Dec
+                    continue;
+                } else { // DecFail
+                    return None;
+                }
+            },
+            (SimpleLang::Number(n), SimpleLang::Number(m)) => {
+                if n==m { // Dec
+                    continue;
+                } else { // DecFail
+                    return None;
+                }
+            },
+            (SimpleLang::Var(x), SimpleLang::Var(y)) => {
+                if x==y { // Triv
+                    continue;
+                } else {
+                    let mut seen = false;
+                    for (z, u) in mu_terms.clone() {
+                        if z == x { // LazyRep
+                            equalities.push((u.clone(), s.clone()));
+                            seen = true;
+                            break;
+                        }
+                    }
+                    if !seen {
+                        if !occurs(&mu_terms, &s, &x) { // Bind
+                            mu_terms.push((x, s.clone()));
+                        } else { // Check
+                            return None;
+                        }
+                    }
+                }
+            },
+            (SimpleLang::Var(x), _) => {
+                let mut seen = false;
+                for (z, u) in mu_terms.clone() {
+                    if z == x { // LazyRep
+                        equalities.push((u.clone(), s.clone()));
+                        seen = true;
+                        break;
+                    }
+                }
+                if !seen {
+                    if !occurs(&mu_terms, &s, &x) { // Bind
+                        mu_terms.push((x, s.clone()));
+                    } else { // Check
+                        return None;
+                    }
+                }
+            },
+            (_, SimpleLang::Var(y)) => {
+                let mut seen = false;
+                for (z, u) in mu_terms.clone() {
+                    if z == y { // LazyRep'
+                        equalities.push((t.clone(), u.clone()));
+                        seen = true;
+                        break;
+                    }
+                }
+                if !seen {
+                    if !occurs(&mu_terms, &t, &y) { // Bind'
+                        mu_terms.push((y, t.clone()));
+                    } else { // Check'
+                        return None;
+                    }
+                }
+            },
+            (_,_) => { // DecFail
+                return None;
+            }
+        }
+    }
+    for (x, term) in mu_terms {
+        let aid = eg.add_expr(term);
+        mu.insert(x, aid); // am I sure of the variables here?
+    }
+    Some(mu)
+}
+
+fn occurs(mu: &Vec<(Slot, RecExpr<SimpleLang>)>, term: &RecExpr<SimpleLang>, x: &Slot) -> bool {
+    match term.node {
+        SimpleLang::Var(y) => {
+            for (z, u) in mu {
+                if *z == y {
+                    return occurs(mu, u, x);
+                }
+            }
+            *x == y
+        },
+        SimpleLang::App(_,_) => {
+            for child in term.children.clone() {
+                if occurs(mu, &child, x) {
+                    return true;
+                }
+            }
+            false
+        },
+        _ => false,
+    }
 }
 
 /// Unifier application.
@@ -2266,22 +2417,177 @@ fn rec_parents(eg: &MyEGraph, wo: &VecDeque<AppliedId>, changed: &Vec<Id>) -> Ve
     v
 }
 
+/// tests if a subsumes b, as the existence of an e-graph morphism from b to a
+fn test_subsumption(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) -> bool {
+    if eg.slots(a.id).is_empty() {
+        let mu = HashMap::new();
+        let mut visited = HashMap::new();
+        return test_subsumption_withunifier(eg, a, b, &mu, &mut visited);
+    }
+    let mus = compute_mgus_extern(eg, a, b);
+    'outer: for mu in mus {
+        for z in b.slots() {
+            if let Some(_) = mu.get(&z) {
+                continue 'outer;
+            }
+        }
+        let mut new_mu = HashMap::new();
+        for z in a.slots() {
+            if let Some(c) = mu.get(&z) {
+                new_mu.insert(z, c.clone());
+            }
+        }
+        let mut visited = HashMap::new();
+        if test_subsumption_withunifier(eg, a, b, &new_mu, &mut visited) {
+            return true;
+        }
+    }
+    false
+}
+
+fn test_subsumption_withunifier(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, visited: &mut HashMap<(AppliedId, AppliedId), Option<bool>>) -> bool {
+    let a = eg.find_applied_id(a);
+    let b = eg.find_applied_id(b);
+    match visited.get(&(a.clone(), b.clone())) {
+        Some(opt_b) => {
+            match *opt_b {
+                Some(b) => return b,
+                None => {
+                    // is it sound?
+                    visited.insert((a.clone(), b.clone()), Some(true));
+                },
+            }
+        },
+        None => {
+            visited.insert((a.clone(), b.clone()), None);
+        },
+    }
+    for nb in eg.enodes_applied(&b) {
+        match nb.clone() {
+            SimpleLang::App(cb, db) => {
+                let mut match_nb = false;
+                for na in eg.enodes_applied(&a) {
+                    match na {
+                        SimpleLang::App(ca, da) => {
+                            if test_subsumption_withunifier(eg, &ca, &cb, mu, visited) && test_subsumption_withunifier(eg, &da, &db, mu, visited) {
+                                match_nb = true;
+                            }
+                        },
+                        SimpleLang::Var(y) => {
+                            match mu.get(&y) {
+                                None => continue,
+                                Some(c) => {
+                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
+                                        match_nb = true;
+                                    }
+                                }
+                            }
+                        },
+                        _ => continue,
+                    }
+                }
+                if !match_nb {
+                    return false;
+                }
+            },
+            SimpleLang::Number(n) => {
+                let mut match_nb = false;
+                for na in eg.enodes_applied(&a) {
+                    match na {
+                        SimpleLang::Number(m) => {
+                            if n == m {
+                                match_nb = true;
+                            }
+                        },
+                        SimpleLang::Var(y) => {
+                            match mu.get(&y) {
+                                None => continue,
+                                Some(c) => {
+                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
+                                        match_nb = true;
+                                    }
+                                }
+                            }
+                        },
+                        _ => continue,
+                    }
+                }
+                if !match_nb {
+                    return false;
+                }
+            },
+            SimpleLang::Symbol(f) => {
+                let mut match_nb = false;
+                for na in eg.enodes_applied(&a) {
+                    match na {
+                        SimpleLang::Symbol(g) => {
+                            if f == g {
+                                match_nb = true;
+                            }
+                        },
+                        SimpleLang::Var(y) => {
+                            match mu.get(&y) {
+                                None => continue,
+                                Some(c) => {
+                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
+                                        match_nb = true;
+                                    }
+                                }
+                            }
+                        },
+                        _ => continue,
+                    }
+                    if !match_nb {
+                        return false;
+                    }
+                }
+            },
+            SimpleLang::Var(x) => {
+                let mut match_nb = false;
+                for na in eg.enodes_applied(&a) {
+                    match na {
+                        SimpleLang::Var(y) => {
+                            match mu.get(&y) {
+                                None => {
+                                    if x == y {
+                                        match_nb = true;
+                                    }
+                                },
+                                Some(c) => {
+                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
+                                        match_nb = true;
+                                    }
+                                }
+                            }
+                        },
+                        _ => continue,
+                    }
+                    if !match_nb {
+                        return false;
+                    }
+                }
+            },
+        }
+    }
+    true
+}
+
 pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
     let w1 = wo.clone();
     for c1 in w1 {
         // one memo table per (c0, c1) pair: the e-graph is mutated inside the
         // `for mu in mgus` loop below, which would invalidate cached results
-        let empty = HashMap::new();
-        let mut memo: MguMemo = HashMap::new();
-        let mut budget = 1000;
-        let mgus = compute_mgus(eg, c0, &c1, &empty, &mut memo, &mut budget);
-        let max_unifiers = 5;
-        let mut count = 0;
+        //let empty = HashMap::new();
+        //let mut memo: MguMemo = HashMap::new();
+        //let mut budget = 1000;
+        let mgus = compute_mgus_extern(eg, c0, &c1); // , &empty, &mut memo, &mut budget
+        //let max_unifiers = 5;
+        //let mut count = 0;
         for mu in mgus {
-            if count >= max_unifiers {
-                break;
-            }
-            count += 1;
+            //if count >= max_unifiers {
+            //    break;
+            //}
+            //count += 1;
             println!("there is a mu");
             let (c_new, vec_modified) = apply_unifier_class_init(eg, &mu, c0, &c1);
             eg.rebuild();
@@ -2294,41 +2600,52 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
             //wo_no_us(wo, us);
             // satisfiability of the class tested by the analyses
             if *eg.analysis_data(c_new.id) <= max {
-                let subsumed = vec_modified.is_empty(); // all nodes that were added were already in the e-graph and no new equality between classes has been learned
-                // porbably an error here: it does not seem to reach
-                if !subsumed {
-                    // every e-class in wo that is modified should be deleted from wo and added to us
-                    /* for c in wo.clone() {
-                        if eg.find_id(c_new.id) == eg.find_id(c.id) {
-                            let reachable_parents = rec_parents(eg, &c);
-                            for c_bis in &reachable_parents {
-                                if wo.contains(c_bis) {
-                                    delete_element(eg, wo, c_bis);
-                                    if !us.contains(&c_bis) {
-                                        us.push_back(c_bis.clone());
-                                    }
-                                }
-                            }
+                let mut subsumed = vec_modified.is_empty(); // all nodes that were added were already in the e-graph and no new equality between classes has been learned
+                let mut has_break = false;
+                for c in wo.clone() {
+                    if test_subsumption(eg, &c, &c_new) {
+                        subsumed = true;
+                        has_break = true;
+                        break;
+                    }
+                }
+                if !has_break {
+                    for c in us.clone() {
+                        if test_subsumption(eg, &c, &c_new) {
+                            subsumed = true;
+                            has_break = true;
+                            break;
                         }
-                        delete_element(eg, us, &c); 
-                        if eg.find_id(c.id) == eg.find_id(c0.id) {
+                    }
+                    if !has_break {
+                        if test_subsumption(eg, &c0, &c_new) {
                             subsumed = true;
                         }
                     }
-                    if !subsumed {
-                        /* if an e-class is already in us, even if modified, it should stay in us!
-                        //let mut new_subsumed = false;
-                        for c in us.clone() {
-                            if eg.find_id(c_new.id) == eg.find_id(c.id) {
-                                todo!()
-                            } 
-                        } */
-                        if !subsumed {
-                            if eg.find_id(c_new.id) == eg.find_id(c0.id) {
-                                todo!()
-                            }
+                }
+                if !subsumed {
+                    // every e-class in wo that is modified should be deleted from wo and added to us
+                    // checks if c_new subsumes any other class
+                    let mut has_break = false;
+                    for c in wo.clone() {
+                        if test_subsumption(eg, &c_new, &c) {
+                            delete_element(eg, wo, &c_new);
+                            delete_element(eg, us, &c_new);
                         }
-                    } */
+                    }
+                    for c in us.clone() {
+                        if test_subsumption(eg, &c_new, &c) {
+                            delete_element(eg, wo, &c_new);
+                            delete_element(eg, us, &c_new);
+                        }
+                    }
+                    if test_subsumption(eg, &c_new, c0) {
+                        delete_element(eg, wo, &c_new);
+                        delete_element(eg, us, &c_new);
+                        subsumed = true;
+                    }
+
+                    // TODO think about if this part is really necessary?
                     let mut v = vec![];
                     for c in vec_modified {
                         let i = eg.find_id(c.id);
@@ -2343,6 +2660,9 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
                             us.push_back(rp);
                         }
                     }
+                    // End TODO
+
+
                     if !us.contains(&c_new) {
                         us.push_back(c_new);
                     }

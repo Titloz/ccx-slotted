@@ -9,6 +9,9 @@ pub use mylanguage::*;
 mod myanalysis;
 pub use myanalysis::*;
 
+mod cost_function;
+pub use cost_function::*;
+
 mod util;
 use util::*;
 
@@ -143,7 +146,7 @@ fn main() {
     let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     eg.dump();
     */
-    /*let res = run_tptp_ueq("../tests/TPTP/TPTP/Problems/UEQ/GRP170-3.p", false);
+    let res = run_tptp_ueq("./tests/TPTP/TPTP/Problems/UEQ/AGT042-10.p", false);
     match res {
         Ok(pair) => {
             let (report, egraph) = pair;
@@ -151,7 +154,7 @@ fn main() {
             egraph.dump();
         },
         Err(x) => println!("error {x}"),
-    }*/
-    let config = UeqRunConfig { max_size: 10, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(30), worker_stack_bytes: 100000000 };
-    let _ = run_ueq_folder("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality.csv", false, config);
+    }
+    //let config = UeqRunConfig { max_size: 10, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(10), worker_stack_bytes: 100000000 };
+    //let _ = run_ueq_folder("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality.csv", false, config);
 }
