@@ -20,6 +20,10 @@ where
     pub egraph_nodes: usize,
     pub egraph_classes: usize,
     pub total_time: f64,
+    pub size_wo: usize,
+    pub size_us: usize,
+    pub initial_size_wo: usize,
+    pub initial_size_us: usize,
 }
 
 impl<T: Clone + std::fmt::Display> std::fmt::Display for CCXStopReason<T> {

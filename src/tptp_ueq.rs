@@ -827,7 +827,7 @@ pub fn run_ueq_problem(
     node_limit: usize,
     time_limit: Duration,
 ) -> Result<(CCXReport, MyEGraph), String> {
-    let mut runner: Runner<(), String> = Runner::new(SizeAnalysisNoApp)
+    let mut runner: Runner<(), String> = Runner::new(SizeNoAppSymbols)
         .with_iter_limit(iter_limit)
         .with_node_limit(node_limit)
         .with_time_limit(time_limit);
@@ -862,7 +862,8 @@ pub fn run_ueq_problem(
     update(&runner.egraph, &mut runner.wo);
     update(&runner.egraph, &mut runner.us);
     wo_no_us(&mut runner.wo, &runner.us);
-
+    let initial_wo_size = runner.wo.len();
+    let initial_us_size = runner.us.len();
     // Nothing to process (e.g. the file only contained disequalities that were
     // ignored). `Runner::run` would panic on an empty `us`, so report directly.
     if runner.us.is_empty() {
@@ -872,6 +873,10 @@ pub fn run_ueq_problem(
             egraph_nodes: runner.egraph.total_number_of_nodes(),
             egraph_classes: runner.egraph.ids().len(),
             total_time: 0.0,
+            size_wo: runner.wo.len(),
+            size_us: runner.us.len(),
+            initial_size_wo: initial_wo_size,
+            initial_size_us: initial_us_size,
         };
         return Ok((report, runner.egraph));
     }

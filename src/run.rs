@@ -17,6 +17,8 @@ where
     let start_time = Instant::now();
     let mut iterations = 0;
     let stop_reason: CCXStopReason;
+    let initial_wo = wo.len();
+    let initial_us = us.len();
 
     loop {
         // core function
@@ -54,5 +56,9 @@ where
         egraph_nodes: egraph.total_number_of_nodes(),
         egraph_classes: egraph.ids().len(),
         total_time: start_time.elapsed().as_secs_f64(),
+        size_wo: wo.len(),
+        size_us: us.len(),
+        initial_size_wo: initial_wo,
+        initial_size_us: initial_us,
     }
 }

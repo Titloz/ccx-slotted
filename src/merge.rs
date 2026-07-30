@@ -1648,7 +1648,7 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::Cell;
-use std::todo;
+use std::{panic, println, todo};
 
 use crate::*;
 //use rustc_hash::FxBuildHasher;
@@ -1811,7 +1811,7 @@ fn transport_results(
     Some(out)
 }
 
-fn compute_mgus(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, memo: &mut MguMemo, budget: &mut usize) -> Vec<Unifier> {
+pub(crate) fn compute_mgus(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, memo: &mut MguMemo, budget: &mut usize) -> Vec<Unifier> {
 
     // Depth cap: if reached, unwind with "no unifiers on this path". Sound —
     // the caller simply learns fewer equalities — and prevents a stack
@@ -2003,7 +2003,7 @@ fn occ(mu: &Unifier, c: &AppliedId, v: &Slot) -> bool { //_eg: &MyEGraph,
 }
 
 
-fn compute_mgus_extern(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) -> Vec<Unifier> {
+pub(crate) fn compute_mgus_extern(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) -> Vec<Unifier> {
     // extract one term per enode for both classes
     let mut a_terms: Vec<RecExpr<SimpleLang>> = vec![];
     let mut b_terms: Vec<RecExpr<SimpleLang>> = vec![];
@@ -2417,160 +2417,6 @@ fn rec_parents(eg: &MyEGraph, wo: &VecDeque<AppliedId>, changed: &Vec<Id>) -> Ve
     v
 }
 
-/// tests if a subsumes b, as the existence of an e-graph morphism from b to a
-fn test_subsumption(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) -> bool {
-    if eg.slots(a.id).is_empty() {
-        let mu = HashMap::new();
-        let mut visited = HashMap::new();
-        return test_subsumption_withunifier(eg, a, b, &mu, &mut visited);
-    }
-    let mus = compute_mgus_extern(eg, a, b);
-    'outer: for mu in mus {
-        for z in b.slots() {
-            if let Some(_) = mu.get(&z) {
-                continue 'outer;
-            }
-        }
-        let mut new_mu = HashMap::new();
-        for z in a.slots() {
-            if let Some(c) = mu.get(&z) {
-                new_mu.insert(z, c.clone());
-            }
-        }
-        let mut visited = HashMap::new();
-        if test_subsumption_withunifier(eg, a, b, &new_mu, &mut visited) {
-            return true;
-        }
-    }
-    false
-}
-
-fn test_subsumption_withunifier(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, visited: &mut HashMap<(AppliedId, AppliedId), Option<bool>>) -> bool {
-    let a = eg.find_applied_id(a);
-    let b = eg.find_applied_id(b);
-    match visited.get(&(a.clone(), b.clone())) {
-        Some(opt_b) => {
-            match *opt_b {
-                Some(b) => return b,
-                None => {
-                    // is it sound?
-                    visited.insert((a.clone(), b.clone()), Some(true));
-                },
-            }
-        },
-        None => {
-            visited.insert((a.clone(), b.clone()), None);
-        },
-    }
-    for nb in eg.enodes_applied(&b) {
-        match nb.clone() {
-            SimpleLang::App(cb, db) => {
-                let mut match_nb = false;
-                for na in eg.enodes_applied(&a) {
-                    match na {
-                        SimpleLang::App(ca, da) => {
-                            if test_subsumption_withunifier(eg, &ca, &cb, mu, visited) && test_subsumption_withunifier(eg, &da, &db, mu, visited) {
-                                match_nb = true;
-                            }
-                        },
-                        SimpleLang::Var(y) => {
-                            match mu.get(&y) {
-                                None => continue,
-                                Some(c) => {
-                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
-                                        match_nb = true;
-                                    }
-                                }
-                            }
-                        },
-                        _ => continue,
-                    }
-                }
-                if !match_nb {
-                    return false;
-                }
-            },
-            SimpleLang::Number(n) => {
-                let mut match_nb = false;
-                for na in eg.enodes_applied(&a) {
-                    match na {
-                        SimpleLang::Number(m) => {
-                            if n == m {
-                                match_nb = true;
-                            }
-                        },
-                        SimpleLang::Var(y) => {
-                            match mu.get(&y) {
-                                None => continue,
-                                Some(c) => {
-                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
-                                        match_nb = true;
-                                    }
-                                }
-                            }
-                        },
-                        _ => continue,
-                    }
-                }
-                if !match_nb {
-                    return false;
-                }
-            },
-            SimpleLang::Symbol(f) => {
-                let mut match_nb = false;
-                for na in eg.enodes_applied(&a) {
-                    match na {
-                        SimpleLang::Symbol(g) => {
-                            if f == g {
-                                match_nb = true;
-                            }
-                        },
-                        SimpleLang::Var(y) => {
-                            match mu.get(&y) {
-                                None => continue,
-                                Some(c) => {
-                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
-                                        match_nb = true;
-                                    }
-                                }
-                            }
-                        },
-                        _ => continue,
-                    }
-                    if !match_nb {
-                        return false;
-                    }
-                }
-            },
-            SimpleLang::Var(x) => {
-                let mut match_nb = false;
-                for na in eg.enodes_applied(&a) {
-                    match na {
-                        SimpleLang::Var(y) => {
-                            match mu.get(&y) {
-                                None => {
-                                    if x == y {
-                                        match_nb = true;
-                                    }
-                                },
-                                Some(c) => {
-                                    if test_subsumption_withunifier(eg, c, &b, mu, visited) {
-                                        match_nb = true;
-                                    }
-                                }
-                            }
-                        },
-                        _ => continue,
-                    }
-                    if !match_nb {
-                        return false;
-                    }
-                }
-            },
-        }
-    }
-    true
-}
 
 pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
     let w1 = wo.clone();
@@ -2599,7 +2445,7 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
             println!("merge 2 - us = {:?}", us);
             //wo_no_us(wo, us);
             // satisfiability of the class tested by the analyses
-            if *eg.analysis_data(c_new.id) <= max {
+            if (*eg.analysis_data(c_new.id)).0 <= max {
                 let mut subsumed = vec_modified.is_empty(); // all nodes that were added were already in the e-graph and no new equality between classes has been learned
                 let mut has_break = false;
                 for c in wo.clone() {
@@ -2626,7 +2472,6 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
                 if !subsumed {
                     // every e-class in wo that is modified should be deleted from wo and added to us
                     // checks if c_new subsumes any other class
-                    let mut has_break = false;
                     for c in wo.clone() {
                         if test_subsumption(eg, &c_new, &c) {
                             delete_element(eg, wo, &c_new);

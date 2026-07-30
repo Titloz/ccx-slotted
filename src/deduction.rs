@@ -1,13 +1,13 @@
 use std::collections::VecDeque;
 use crate::*;
 
-fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>, budget: &mut usize) -> bool { 
+fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { //, budget: &mut usize
     //println!("entry deduct_intern with {f} and {:?}", c0.id);
     // wo must verify for all id i, eg.find_id(i)=i
-    if *budget <= 0 {
-        return true;
-    }
-    *budget -= 1;
+    // *if *budget <= 0 {
+    //    return true;
+    //}
+    //*budget -= 1;
     if i!=n {
         // construct a candidate e-node
         for c in wo.clone() {
@@ -17,7 +17,7 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: 
                 print!("{:?}, ", child.id);
             }
             println!("]");
-            if !deduct_intern(eg, max, wo, us, f, i+1, n, c0, used || (c == *c0), choices, budget){
+            if !deduct_intern(eg, max, wo, us, f, i+1, n, c0, used || (c == *c0), choices){ //, budget
                 choices.pop();
                 return false;
             } else {
@@ -31,11 +31,12 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: 
         //println!("choices = [");
         for child in choices.clone() {
             //print!("{:?}, ", child.id);
-            sum_analyses += *eg.analysis_data(child.id);
+            sum_analyses += (*eg.analysis_data(child.id)).0;
             //rev_children.push(child);
         }
         //println!("]");
-        if sum_analyses <= max {
+        if sum_analyses <= max { // satisfiability test
+
             // add the new e-node app(app(...app(f,c1)...,cn-1),cn)
             // rebuild
             // is there a variable problem here?
@@ -51,21 +52,50 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: 
             update(eg, wo);
             let new_ai = eg.find_applied_id(&class_f);
             //println!("classf = {:?}", new_ai.id);
-            if !us.contains(&new_ai) && eg.find_id(new_ai.id) != eg.find_id(c0.id) {
+
+            // subsumption tests
+            for c in wo.clone() {
+                if test_subsumption(eg, &c, &new_ai) {
+                    return true;
+                }
+            }
+            for c in us.clone() {
+                if test_subsumption(eg, &c, &new_ai) {
+                    return true;
+                }
+            }
+            let mut subsumed = false;
+            for c in wo.clone() {
+                if test_subsumption(eg, &new_ai, &c) {
+                    delete_element(eg, wo, &c);
+                    delete_element(eg, us, &c);
+                    if c == eg.find_applied_id(&c0) {
+                        subsumed = true;
+                    }
+                }
+            }
+            if !us.contains(&new_ai) {
                 us.push_back(new_ai);
             }
             wo_no_us(wo, us);
+            if subsumed {
+                return false;
+            }
+
+
+            //if !us.contains(&new_ai) && eg.find_id(new_ai.id) != eg.find_id(c0.id) {
+            //    us.push_back(new_ai);
+            //}
+            //wo_no_us(wo, us);
             //println!("{:?}", wo);
             //println!("{:?}", us);
-            return !has_changed;
+            //return !has_changed;
             /*if !has_changed {
                 return true; //test
             } else {
                 return false;
             }*/
-        } else { // unsat case, I had to adapt. is it sound?
-            return true;
-        }
+        } 
     }
     return true;
 }
@@ -75,8 +105,8 @@ pub(crate) fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u6
     //println!("c0 is {:?}", c0.id);
     // symbol_list is the list of symbols with their arity
     // wo must verify for all id i, eg.find_id(i)=i
-    let analysis = *eg.analysis_data(c0.id);
-    if analysis >= max {
+    let analysis = eg.analysis_data(c0.id).clone();
+    if analysis.0 >= max {
         return true;
     }
     let rep = eg.find_applied_id(c0);
@@ -86,9 +116,9 @@ pub(crate) fn deduct(eg: &mut MyEGraph, symbol_list: &Vec<(String, u8)>, max: u6
     let mut choices;
     for (f, n) in symbol_list {
         if *n > 0 {
-            let mut max_calls = 10000;
+            //let mut max_calls = 10000;
             choices = Vec::new();
-            if !deduct_intern(eg, max, wo, us, f, 0, *n, c0, false, &mut choices, &mut max_calls) {
+            if !deduct_intern(eg, max, wo, us, f, 0, *n, c0, false, &mut choices) { //, &mut max_calls
                 //println!("out deduct_intern");
                 delete_element(eg, wo, c0);
                 if !us.contains(c0) {

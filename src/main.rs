@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::println;
 use std::time::Duration;
 
 pub use slotted_egraphs::*;
@@ -21,6 +22,9 @@ pub(crate) use merge::*;
 mod deduction;
 pub(crate) use deduction::*;
 
+mod subsumption;
+pub(crate) use subsumption::*;
+
 mod report;
 pub use report::*;
 
@@ -33,7 +37,7 @@ pub use runner::*;
 mod tptp_ueq; 
 pub use tptp_ueq::*;
 
-pub type MyEGraph = EGraph<SimpleLang, SizeAnalysisNoApp>;
+pub type MyEGraph = EGraph<SimpleLang, SizeNoAppSymbols>;
 
 struct Equation {
     pub l: RecExpr<SimpleLang>,
@@ -75,7 +79,7 @@ pub fn ccx_step(eg: &mut MyEGraph, max: u64, symbol_list: &Vec<(String, u8)>, wo
 
 fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterations: u64) -> MyEGraph {
     // initialization
-    let analysis = SizeAnalysisNoApp;
+    let analysis = SizeNoAppSymbols;
     let mut eg = MyEGraph::new(analysis);
     let mut wo: VecDeque<AppliedId> = VecDeque::new();
     let mut us: VecDeque<AppliedId> = VecDeque::new();
@@ -97,56 +101,35 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
         let cf = eg.add_syn_expr(re);
         wo.push_back(cf);
     }
+    
     // rebuild
     eg.rebuild();
     update(&eg, &mut wo);
     update(&eg, &mut us);
     wo_no_us(&mut wo, &us);
-    //println!("{:?}", wo);
-    //println!("{:?}", us);
+
     // main loop
     let mut iterations = 0;
     while !us.is_empty() && iterations < max_iterations { //&& iterations < max_iterations
         iterations += 1;
-        /* let c = us.pop_front().unwrap();
-        println!("enter merge");
-        if merge(&mut eg, max, &mut wo, &mut us, &c) {
-            println!("enter deduct");
-            println!("{:?}", wo); 
-            println!("{:?}", us);
-            if deduct(&mut eg, symbol_list, max, &mut wo, &mut us, &c) {
-                let cfind = eg.find_applied_id(&c);
-                if !wo.contains(&cfind) {
-                    wo.push_back(cfind);
-                }
-            }
-        } */
        ccx_step(&mut eg, max, symbol_list, &mut wo, &mut us);
     }
-    //println!("wo = ");
-    for i in wo.clone() {
-        //println!("{:?}", i);
-    }
-    //println!("us = ");
-    for i in us.clone() {
-        //println!("{:?}", i);
-    }
-    //println!("iterations = {}", iterations);
+    println!("wo = {:?}", wo);
+    println!("us = {:?}", us);
     return eg;
 }
 
 fn main() {
-    /* 
+    
     let max = 10;
     let max_iterations = 50;
-    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 2), ("g".to_owned(), 2)];
-    let eqs: Vec<String> = vec!["(app (app f (var $x)) (var $y)) = (app (app g (var $x)) (var $y))".to_owned(),
-                                "(app (app f (var $x)) (var $y)) = (app (app g (var $y)) (var $x))".to_owned()];
+    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 1), ("g".to_owned(), 1)];
+    let eqs: Vec<String> = vec!["(app f (var $x)) = (app g (var $x))".to_owned()];
     let parsed_eqs = to_equations(eqs);
     let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     eg.dump();
-    */
-    let res = run_tptp_ueq("./tests/TPTP/TPTP/Problems/UEQ/AGT042-10.p", false);
+    
+    /*let res = run_tptp_ueq("./tests/TPTP/TPTP/Problems/UEQ/AGT042-10.p", false);
     match res {
         Ok(pair) => {
             let (report, egraph) = pair;
@@ -154,7 +137,7 @@ fn main() {
             egraph.dump();
         },
         Err(x) => println!("error {x}"),
-    }
+    }*/
     //let config = UeqRunConfig { max_size: 10, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(10), worker_stack_bytes: 100000000 };
     //let _ = run_ueq_folder("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality.csv", false, config);
 }

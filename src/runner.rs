@@ -88,7 +88,7 @@ where
     IterData: IterationData,
     CustomErrorT: Clone,
 {
-    pub fn new(n: SizeAnalysisNoApp) -> Self {
+    pub fn new(n: SizeNoAppSymbols) -> Self {
         Self {
             egraph: EGraph::new(n),
             iterations: vec![],
@@ -163,6 +163,10 @@ where
                 .unwrap()
                 .duration_since(self.limits.start_time.unwrap())
                 .as_secs_f64(),
+            size_wo: self.wo.len(),
+            size_us: self.us.len(),
+            initial_size_wo: self.wo.len(), // wrong
+            initial_size_us: self.us.len(), // wrong
         }
     }
 
