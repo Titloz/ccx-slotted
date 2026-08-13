@@ -1,0 +1,7 @@
+,iterations,iterations,iterations,nodes,nodes,nodes,classes,classes,classes,total_time,total_time,total_time,size_wo,size_wo,size_wo,size_us,size_us,size_us,initial_size_wo,initial_size_wo,initial_size_wo,initial_size_us,initial_size_us,initial_size_us
+,count,mean,median,count,mean,median,count,mean,median,count,mean,median,count,mean,median,count,mean,median,count,mean,median,count,mean,median
+stop-reason,,,,,,,,,,,,,,,,,,,,,,,,
+EmptyUs,12,27.25,32.0,12,148.91666666666666,66.0,12,188.33333333333334,66.0,12,1.6198055564166667,0.7414630234999999,12,7.916666666666667,11.0,12,0.0,0.0,12,1.4166666666666667,2.0,12,1.6666666666666667,1.0
+NodeLimit,26,1.0,1.0,26,135195.96153846153,139321.0,26,135220.42307692306,139321.0,26,1898.351623965077,1667.433219625,26,7576.2692307692305,15.0,26,31.96153846153846,45.0,26,7604.923076923077,56.0,26,3.0,3.0
+Other(panicked),0,,,0,,,0,,,0,,,0,,,0,,,0,,,0,,
+TimeLimit,1122,41.21836007130125,27.5,1122,4257.889483065954,730.5,1122,4311.483957219251,738.0,1122,23.55207090204813,11.003701712,1122,30.3698752228164,4.0,1122,35.99910873440285,28.0,1122,31.132798573975045,2.0,1122,4.762923351158645,3.5

@@ -54,6 +54,7 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: 
             //println!("classf = {:?}", new_ai.id);
 
             // subsumption tests
+            /* for efficiency reasons, we get rid of them
             for c in wo.clone() {
                 if test_subsumption(eg, &c, &new_ai) {
                     return true;
@@ -81,15 +82,15 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: 
             if subsumed {
                 return false;
             }
+            */
 
-
-            //if !us.contains(&new_ai) && eg.find_id(new_ai.id) != eg.find_id(c0.id) {
-            //    us.push_back(new_ai);
-            //}
-            //wo_no_us(wo, us);
-            //println!("{:?}", wo);
-            //println!("{:?}", us);
-            //return !has_changed;
+            if !us.contains(&new_ai) && eg.find_id(new_ai.id) != eg.find_id(c0.id) {
+               us.push_back(new_ai);
+            }
+            wo_no_us(wo, us);
+            println!("{:?}", wo);
+            println!("{:?}", us);
+            return !has_changed;
             /*if !has_changed {
                 return true; //test
             } else {

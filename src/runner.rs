@@ -138,7 +138,7 @@ where
             .check_limits(self.iterations.len(), &self.egraph)
     }
 
-    pub fn run(&mut self) -> CCXReport<CustomErrorT> {
+    pub fn run(&mut self, initial_wo_size: usize, initial_us_size: usize) -> CCXReport<CustomErrorT> {
         println!("run - entry");
         let mut n = 0;
         loop {
@@ -165,8 +165,8 @@ where
                 .as_secs_f64(),
             size_wo: self.wo.len(),
             size_us: self.us.len(),
-            initial_size_wo: self.wo.len(), // wrong
-            initial_size_us: self.us.len(), // wrong
+            initial_size_wo: initial_wo_size,
+            initial_size_us: initial_us_size,
         }
     }
 

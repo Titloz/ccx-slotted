@@ -122,12 +122,27 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
 fn main() {
     
     let max = 10;
-    let max_iterations = 50;
-    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 1), ("g".to_owned(), 1)];
-    let eqs: Vec<String> = vec!["(app f (var $x)) = (app g (var $x))".to_owned()];
+    let max_iterations = 10000;
+    let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 2), ("g".to_owned(), 2)];
+    let eqs: Vec<String> = vec!["(app (app f (var $x)) (var $y)) = (app (app g (var $x)) (var $y))".to_owned(),
+                                "(app (app f (var $x)) (var $y)) = (app (app g (var $y)) (var $x))".to_owned()];
     let parsed_eqs = to_equations(eqs);
-    let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
-    eg.dump();
+    let mut equations : Vec<(String, String)> = vec![];
+    for eq in parsed_eqs {
+        equations.push((eq.l.to_string(), eq.r.to_string()));
+    }
+    let problem: UeqProblem = UeqProblem{equations: equations.clone(), symbol_list, num_disequalities: 0};
+    let result = run_ueq_problem(&problem, max, max_iterations, 100000, Duration::from_secs(500));
+    match result {
+        Ok(pair) => {
+            let (report, egraph) = pair;
+            println!("{:?}", report);
+            egraph.dump();
+        },
+        Err(x) => println!("error {x}"),
+    }
+    //let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
+    //eg.dump();
     
     /*let res = run_tptp_ueq("./tests/TPTP/TPTP/Problems/UEQ/AGT042-10.p", false);
     match res {
@@ -139,5 +154,5 @@ fn main() {
         Err(x) => println!("error {x}"),
     }*/
     //let config = UeqRunConfig { max_size: 10, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(10), worker_stack_bytes: 100000000 };
-    //let _ = run_ueq_folder("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality.csv", false, config);
+    //let _ = run_ueq_folder("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality_continue.csv", false, config);
 }
