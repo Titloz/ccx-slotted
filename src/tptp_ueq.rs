@@ -17,7 +17,7 @@ use crate::*;
 // `slotted_egraphs` also exports a `Runner`; we want the one from runner.rs.
 use crate::runner::Runner;
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::{fs, vec};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -38,6 +38,38 @@ pub struct UeqProblem {
     pub num_disequalities: usize,
 }
 
+fn get_size_beta(symbol_list: &Vec<(String, u8)>, nesting_depth: u8) -> u64 {
+    // filter constants
+    let mut symbols = vec![];
+    for (f, n) in symbol_list.clone() {
+        if n > 0 {
+            symbols.push((f,n));
+        }
+    }
+
+    // in case all symbols are constants
+    if symbols.is_empty() {
+        return 1;
+    }
+
+    let mut other = vec![];
+    let mut depth = 0;
+    let mut size: u64 = 0;
+    while depth < nesting_depth {
+        if symbols.is_empty() {
+            symbols = other;
+            symbols.reverse();
+            other = vec![];
+        }
+        let (f,n) = symbols.pop().expect("");
+        size = size + (n as u64);
+        other.push((f,n));  
+        depth += 1;
+    }
+    size
+}
+
+
 /// Parse a TPTP UEQ problem file and run the CCX procedure on it,
 /// with the default limits of [`Runner`] (`max = 10`, 30 iterations,
 /// 10_000 nodes, 60 seconds).
@@ -52,6 +84,14 @@ pub fn run_tptp_ueq(
 ) -> Result<(CCXReport, MyEGraph), String> {
     run_tptp_ueq_with_limits(path, disequality_as_equality, 10, 3000, 10_000, Duration::from_secs(30))
 }
+
+pub fn run_tptp_ueq_depth(
+    path: impl AsRef<Path>,
+    disequality_as_equality: bool,
+) -> Result<(CCXReport, MyEGraph), String> {
+    run_tptp_ueq_with_limits_depth(path, disequality_as_equality, 6, 3000, 10_000, Duration::from_secs(30))
+}
+
 
 /// Same as [`run_tptp_ueq`], but with explicit limits:
 /// `max_size` is the maximal analysis value ("term size") considered by the
@@ -134,6 +174,20 @@ pub fn run_ueq_problem(
     Ok((report, runner.egraph))
 }
 
+
+pub fn run_tptp_ueq_with_limits_depth(
+    path: impl AsRef<Path>,
+    disequality_as_equality: bool,
+    nesting_depth: u8,
+    iter_limit: usize,
+    node_limit: usize,
+    time_limit: Duration,
+) -> Result<(CCXReport, MyEGraph), String> {
+    let problem = parse_tptp_ueq(path.as_ref(), disequality_as_equality)?;
+    let max_size = get_size_beta(&problem.symbol_list, nesting_depth);
+    run_ueq_problem(&problem, max_size, iter_limit, node_limit, time_limit)
+}
+
 // ---------------------------------------------------------------------------
 // batch running over a folder
 // ---------------------------------------------------------------------------
@@ -152,6 +206,7 @@ pub struct UeqRunConfig {
     pub worker_stack_bytes: usize,
 }
 
+
 impl Default for UeqRunConfig {
     fn default() -> Self {
         UeqRunConfig {
@@ -159,6 +214,34 @@ impl Default for UeqRunConfig {
             iter_limit: 30,
             node_limit: 10_000,
             time_limit: Duration::from_secs(60),
+            worker_stack_bytes: 256 * 1024 * 1024,
+        }
+    }
+}
+
+// same with depth
+/// Limits used for every problem of a batch run (see [`run_ueq_folder`]).
+#[derive(Clone, Copy)]
+pub struct UeqRunConfigDepth {
+    /// Maximal analysis value ("term size") explored.
+    pub max_depth: u8,
+    pub iter_limit: usize,
+    pub node_limit: usize,
+    pub time_limit: Duration,
+    /// Stack size of the per-problem worker thread, in bytes. The deep
+    /// recursion of the procedure needs far more than the default main-thread
+    /// stack; a problem that overflows even this only kills its own worker.
+    pub worker_stack_bytes: usize,
+}
+
+
+impl Default for UeqRunConfigDepth {
+    fn default() -> Self {
+        UeqRunConfigDepth {
+            max_depth: 6,
+            iter_limit: 300000,
+            node_limit: 20_000,
+            time_limit: Duration::from_secs(1800),
             worker_stack_bytes: 256 * 1024 * 1024,
         }
     }
@@ -262,6 +345,77 @@ pub fn run_ueq_folder(
     Ok(())
 }
 
+// same with depth
+pub fn run_ueq_folder_depth(
+    folder: impl AsRef<Path>,
+    csv_path: impl AsRef<Path>,
+    disequality_as_equality: bool,
+    config: UeqRunConfigDepth,
+) -> Result<(), String> {
+    use std::io::Write;
+
+    let folder = folder.as_ref();
+    let mut files = Vec::new();
+    collect_problem_files(folder, &mut files)?;
+    files.sort();
+
+    let mut out = fs::File::create(csv_path.as_ref())
+        .map_err(|e| format!("cannot create `{}`: {e}", csv_path.as_ref().display()))?;
+    writeln!(out, "name;stop-reason;iterations;nodes;classes;total_time;size_wo;size_us;initial_size_wo;initial_size_us")
+        .map_err(|e| format!("cannot write CSV header: {e}"))?;
+
+    //let mut seen = false;
+    for path in &files {
+        // Problem name: file name without extension (unique within a TPTP
+        // library; falls back to the full path if there is no file stem).
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| path.display().to_string());
+        //if name == "MSC018-10".to_string() {
+        //    seen = true;
+        //}
+        //if !seen {
+        //    continue;
+        //}
+        let outcome = run_one_problem_depth(path, disequality_as_equality, config);
+
+        let line = match outcome {
+            ProblemOutcome::Ok(r) => format!(
+                "{};{};{};{};{};{};{};{};{};{}",
+                sanitize_csv_field(&name),
+                r.stop_reason,
+                r.iterations,
+                r.egraph_nodes,
+                r.egraph_classes,
+                r.total_time,
+                r.size_wo,
+                r.size_us,
+                r.initial_size_wo,
+                r.initial_size_us
+            ),
+            ProblemOutcome::ParseError(msg) => format!(
+                "{};Other(parse error: {});;;;",
+                sanitize_csv_field(&name),
+                sanitize_csv_field(&msg)
+            ),
+            ProblemOutcome::Panicked => {
+                format!("{};Other(panicked);;;;", sanitize_csv_field(&name))
+            }
+            ProblemOutcome::StackOverflow => {
+                format!("{};Other(stack overflow);;;;", sanitize_csv_field(&name))
+            }
+        };
+
+        writeln!(out, "{line}").map_err(|e| format!("cannot write CSV line: {e}"))?;
+        // flush per line so a later hard crash still leaves the earlier results
+        out.flush().map_err(|e| format!("cannot flush CSV: {e}"))?;
+    }
+
+    Ok(())
+}
+
 /// Run a single problem, isolating it from the rest of the batch.
 ///
 /// The run executes on a dedicated worker thread with a large stack. This
@@ -317,6 +471,71 @@ fn run_one_problem(
             run_ueq_problem(
                 &problem,
                 config.max_size,
+                config.iter_limit,
+                config.node_limit,
+                config.time_limit,
+            )
+            .map(|(report, _eg)| report) // drop the e-graph before returning
+        }));
+        std::panic::set_hook(prev_hook);
+        result
+    });
+
+    let worker = match worker {
+        Ok(w) => w,
+        // Could not even spawn the thread (e.g. stack too large to allocate):
+        // report it rather than crashing the batch.
+        Err(_) => return ProblemOutcome::StackOverflow,
+    };
+
+    // `join` returns Err if the worker aborted (stack overflow) or panicked
+    // without our catch (shouldn't happen, but treated the same way).
+    match worker.join() {
+        Ok(Ok(Ok(report))) => ProblemOutcome::Ok(report),
+        Ok(Ok(Err(e))) => ProblemOutcome::ParseError(e),
+        Ok(Err(_)) => ProblemOutcome::Panicked,      // caught panic in worker
+        Err(_) => ProblemOutcome::StackOverflow,     // worker thread died
+    }
+}
+
+
+// same with depth
+fn run_one_problem_depth(
+    path: &Path,
+    disequality_as_equality: bool,
+    config: UeqRunConfigDepth,
+) -> ProblemOutcome {
+    // Parse first (its errors are ordinary `Result`s, cheap, no deep recursion).
+    let problem = match parse_tptp_ueq(path, disequality_as_equality) {
+        Ok(p) => p,
+        Err(e) => return ProblemOutcome::ParseError(e),
+    };
+
+    // 256 MiB worker stack: generous head-room for the recursion without being
+    // so large that it fails to allocate. Adjust via UeqRunConfig if needed.
+    let stack_size = config.worker_stack_bytes;
+
+    let builder = std::thread::Builder::new()
+        .name("ueq-worker".to_string())
+        .stack_size(stack_size);
+
+    let worker = builder.spawn(move || {
+        let prev_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        // Raise the recursion-depth cap proportionally to this worker's stack.
+        // Each frame of the procedure's recursion costs a few KiB of stack, so
+        // budgeting ~one allowed frame per 16 KiB of stack keeps the depth cap
+        // strictly below what would overflow -- the recursion returns "no
+        // result" at the cap instead of aborting the process.
+        crate::merge::set_max_recursion_depth((stack_size / 16_384).max(1_000));
+        // Construct, run, and DROP the e-graph entirely inside this thread:
+        // `EGraph` is not `Send`, so it must never cross the thread boundary.
+        // Only the (Send) `CCXReport` is returned; the e-graph is freed here,
+        // on this thread, before `join`.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_ueq_problem(
+                &problem,
+                get_size_beta(&problem.symbol_list, config.max_depth),
                 config.iter_limit,
                 config.node_limit,
                 config.time_limit,

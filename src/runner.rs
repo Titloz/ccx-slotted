@@ -181,7 +181,7 @@ where
         let mut result: Result<(), CCXStopReason<CustomErrorT>> = Ok(());
         println!("run_one - before ccx_step");
         // Do one step, then check hooks, then check limits, then check if saturated.
-        let us_empty = ccx_step(&mut self.egraph, self.max, &self.symbol_list, &mut self.wo, &mut self.us);  //apply_rewrites(&mut self.egraph, rewrites); 
+        let us_empty = ccx_step(&mut self.egraph, self.max, &self.symbol_list, &mut self.wo, &mut self.us, self.limits.time_limit.clone());  //apply_rewrites(&mut self.egraph, rewrites); 
         println!("run_one - after ccx_step");
         result = result
             .and_then(|_| {

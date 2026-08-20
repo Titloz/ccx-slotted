@@ -22,7 +22,7 @@ where
 
     loop {
         // core function
-        let us_empty: bool = ccx_step(egraph, max_size, symbol_list, wo, us);
+        let us_empty: bool = ccx_step(egraph, max_size, symbol_list, wo, us, Duration::from_secs(time_limit as u64));
 
         match hook(egraph) {
             Ok(_) => (),

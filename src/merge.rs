@@ -1648,7 +1648,8 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::cell::Cell;
-use std::{panic, println, todo};
+use std::time::Instant;
+use std::{panic, println, todo, vec};
 
 use crate::*;
 //use rustc_hash::FxBuildHasher;
@@ -1810,6 +1811,25 @@ fn transport_results(
     }
     Some(out)
 }
+/* 
+pub(crate) fn compute_mgus_withsize(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, memo: &mut MguMemo, max: u64) {
+    // canonicalize
+    let a = eg.find_applied_id(a);
+    let b = eg.find_applied_id(b);
+    let key = (a.id, b.id);
+
+    match memo.get(&key) {
+        None => {
+            todo!()
+        },
+        Some(MguMemoEntry::InProgress) => {
+            todo!()
+        },
+        Some(MguMemoEntry::Done(ra, rb, , ))
+    }
+}
+*/
+
 
 pub(crate) fn compute_mgus(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, memo: &mut MguMemo, budget: &mut usize) -> Vec<Unifier> {
 
@@ -2002,44 +2022,61 @@ fn occ(mu: &Unifier, c: &AppliedId, v: &Slot) -> bool { //_eg: &MyEGraph,
     return false;
 }
 
+fn extract_all_lessthansize(eg: &MyEGraph, max: u64, a: &AppliedId) -> Vec<RecExpr<SimpleLang>> {
+    let a = eg.find_applied_id(&a);
+    let terms = extract_all_lessthansize_aux(eg, max, &a);
+    let mut out = vec![];
+    for t in terms {
+        out.push(t.0);
+    }
+    out
+}
 
-pub(crate) fn compute_mgus_extern(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) -> Vec<Unifier> {
-    // extract one term per enode for both classes
-    let mut a_terms: Vec<RecExpr<SimpleLang>> = vec![];
-    let mut b_terms: Vec<RecExpr<SimpleLang>> = vec![];
-    let extractor: Extractor<SimpleLang, AstSizeCostNoApp> = Extractor::new(eg, AstSizeCostNoApp);
-    for na in eg.enodes_applied(a) {
-        match na.clone() {
-            SimpleLang::App(c,d) => {
-                let tc = extractor.extract(&c, eg);
-                let td = extractor.extract(&d, eg);
-                let out: RecExpr<SimpleLang> = RecExpr { node: SimpleLang::App(AppliedId::null(), AppliedId::null()),
-                     children: [tc, td].into()
-                };
-                a_terms.push(out);
+
+fn extract_all_lessthansize_aux(eg: &MyEGraph, budget: u64, a: &AppliedId) -> Vec<(RecExpr<SimpleLang>, u64)> {
+    // budget is initially called with the max size considered
+    if budget <= 0 {
+        return vec![];
+    }
+    let mut terms = vec![];
+    for node in eg.enodes_applied(&a) {
+        match node.clone() {
+            SimpleLang::App(c, d) => {
+                let terms_c = extract_all_lessthansize_aux(eg, budget-2, &c);
+                let terms_d = extract_all_lessthansize_aux(eg, budget-2, &d);
+                for tc in terms_c {
+                    for td in terms_d.clone() {
+                        if tc.1 + td.1 <= budget-1 {
+                            terms.push((RecExpr {node: SimpleLang::App(AppliedId::null(), AppliedId::null()), children : vec![tc.0.clone(), td.0]}, tc.1 + td.1 + 1));
+                        }
+                    }
+                }
             },
             _ => {
-                let out = RecExpr {node: na.clone(), children: vec![]};
-                a_terms.push(out);
+                terms.push((RecExpr { node, children: vec![] }, 1));
             },
         }
     }
-    for nb in eg.enodes_applied(b) {
-        match nb.clone() {
-            SimpleLang::App(c,d) => {
-                let tc = extractor.extract(&c, eg);
-                let td = extractor.extract(&d, eg);
-                let out: RecExpr<SimpleLang> = RecExpr { node: SimpleLang::App(AppliedId::null(), AppliedId::null()),
-                     children: [tc, td].into()
-                };
-                b_terms.push(out);
-            },
-            _ => {
-                let out = RecExpr {node: nb.clone(), children: vec![]};
-                b_terms.push(out);
-            },
-        }
+    // should I apply the permutation group here? Or can I wait and retrieve the result later? we'll go fot he 2nd option as of now.
+    terms
+}
+
+
+
+pub(crate) fn compute_mgus_extern(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId, max: u64) -> Vec<Unifier> {
+    let a = eg.find_applied_id(a);
+    let b = eg.find_applied_id(b);
+    let a_terms = extract_all_lessthansize(eg, max, &a);
+    let b_terms = extract_all_lessthansize(eg, max, &b);
+    /*let group_a;
+    let group_b;
+    if let Some(class_a) = eg.classes.get(&a.id) {
+        group_a = class_a.group.clone();
     }
+    if let Some(class_b) = eg.classes.get(&b.id) {
+        group_b = class_b.group.clone();
+    }
+    */
     // directly compute mgus between terms
     let mut out : Vec<Unifier> = vec![];
     for ta in a_terms {
@@ -2051,6 +2088,7 @@ pub(crate) fn compute_mgus_extern(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedI
             }
         }
     }
+    // we lack of mgus obtained after the permutations are applied here
     out
 }
 
@@ -2418,7 +2456,9 @@ fn rec_parents(eg: &MyEGraph, wo: &VecDeque<AppliedId>, changed: &Vec<Id>) -> Ve
 }
 
 
-pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
+pub(crate) fn merge(eg: &mut MyEGraph, max: u64, time_limit: &Duration, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, c0: &AppliedId) -> bool {
+    let mut elapsed_time = Duration::from_secs(0);
+    let mut start = Instant::now();
     let w1 = wo.clone();
     for c1 in w1 {
         // one memo table per (c0, c1) pair: the e-graph is mutated inside the
@@ -2426,7 +2466,13 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
         //let empty = HashMap::new();
         //let mut memo: MguMemo = HashMap::new();
         //let mut budget = 1000;
-        let mgus = compute_mgus_extern(eg, c0, &c1); // , &empty, &mut memo, &mut budget
+        let mgus = compute_mgus_extern(eg, c0, &c1, max); // , &empty, &mut memo, &mut budget
+        // time check
+        elapsed_time += start.elapsed();
+        start = Instant::now();
+        if elapsed_time > *time_limit {
+            return false;
+        }
         //let max_unifiers = 5;
         //let mut count = 0;
         for mu in mgus {
@@ -2434,22 +2480,28 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
             //    break;
             //}
             //count += 1;
-            println!("there is a mu");
+            //println!("there is a mu");
             let (c_new, vec_modified) = apply_unifier_class_init(eg, &mu, c0, &c1);
+            // time check
+            elapsed_time += start.elapsed();
+            start = Instant::now();
+            if elapsed_time > *time_limit {
+                return false;
+            }
             eg.rebuild();
-            println!("merge - wo = {:?}", wo);
-            println!("merge - us = {:?}", us);
+            //println!("merge - wo = {:?}", wo);
+            //println!("merge - us = {:?}", us);
             update(eg, wo);
             update(eg, us);
-            println!("merge 2 - wo = {:?}", wo);
-            println!("merge 2 - us = {:?}", us);
+            //println!("merge 2 - wo = {:?}", wo);
+            //println!("merge 2 - us = {:?}", us);
             //wo_no_us(wo, us);
             // satisfiability of the class tested by the analyses
             if (*eg.analysis_data(c_new.id)).0 <= max {
                 let mut subsumed = vec_modified.is_empty(); // all nodes that were added were already in the e-graph and no new equality between classes has been learned
                 let mut has_break = false;
                 for c in wo.clone() {
-                    if test_subsumption(eg, &c, &c_new) {
+                    if test_subsumption(eg, max,&c, &c_new) {
                         subsumed = true;
                         has_break = true;
                         break;
@@ -2457,14 +2509,14 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
                 }
                 if !has_break {
                     for c in us.clone() {
-                        if test_subsumption(eg, &c, &c_new) {
+                        if test_subsumption(eg, max, &c, &c_new) {
                             subsumed = true;
                             has_break = true;
                             break;
                         }
                     }
                     if !has_break {
-                        if test_subsumption(eg, &c0, &c_new) {
+                        if test_subsumption(eg,  max,&c0, &c_new) {
                             subsumed = true;
                         }
                     }
@@ -2473,23 +2525,28 @@ pub(crate) fn merge(eg: &mut MyEGraph, max: u64, wo: &mut VecDeque<AppliedId>, u
                     // every e-class in wo that is modified should be deleted from wo and added to us
                     // checks if c_new subsumes any other class
                     for c in wo.clone() {
-                        if test_subsumption(eg, &c_new, &c) {
+                        if test_subsumption(eg, max, &c_new, &c) {
                             delete_element(eg, wo, &c_new);
                             delete_element(eg, us, &c_new);
                         }
                     }
                     for c in us.clone() {
-                        if test_subsumption(eg, &c_new, &c) {
+                        if test_subsumption(eg, max,&c_new, &c) {
                             delete_element(eg, wo, &c_new);
                             delete_element(eg, us, &c_new);
                         }
                     }
-                    if test_subsumption(eg, &c_new, c0) {
+                    if test_subsumption(eg, max, &c_new, c0) {
                         delete_element(eg, wo, &c_new);
                         delete_element(eg, us, &c_new);
                         subsumed = true;
                     }
-
+                    // time check
+                    elapsed_time += start.elapsed();
+                    start = Instant::now();
+                    if elapsed_time > *time_limit {
+                        return false;
+                    }
                     // TODO think about if this part is really necessary?
                     let mut v = vec![];
                     for c in vec_modified {

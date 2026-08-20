@@ -3,7 +3,7 @@ use std::panic;
 use crate::*;
 
 /// tests if a subsumes b, as the existence of an e-graph morphism from b to a
-pub(crate) fn test_subsumption(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) -> bool {
+pub(crate) fn test_subsumption(eg: &mut MyEGraph, max: u64, a: &AppliedId, b: &AppliedId) -> bool {
     println!("test_subsumption - entry");
     if a == b {
         return false; // indeed, a subsumes b in that case but you don't want to get rid of it
@@ -18,7 +18,7 @@ pub(crate) fn test_subsumption(eg: &mut MyEGraph, a: &AppliedId, b: &AppliedId) 
         let mut visited = HashMap::new();
         return test_subsumption_withunifier_norec(eg, a, b, &mu, &mut visited);
     }
-    let mus = compute_mgus_extern(eg, a, b);
+    let mus = compute_mgus_extern(eg, a, b, max);
     'outer: for mu in mus {
         for z in b.slots() {
             if let Some(_) = mu.get(&z) {

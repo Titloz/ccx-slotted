@@ -60,13 +60,13 @@ fn to_equations(eqs: Vec<String>) -> Vec<Equation> {
     v
 }
 
-pub fn ccx_step(eg: &mut MyEGraph, max: u64, symbol_list: &Vec<(String, u8)>, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>) -> bool {
+pub fn ccx_step(eg: &mut MyEGraph, max: u64, symbol_list: &Vec<(String, u8)>, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, time_limit: Duration) -> bool {
     //println!("ccx_step - entry");
     let c = us.pop_front().unwrap();
     println!("ccx_step - before merge");
-    if merge(eg, max, wo, us, &c) {
+    if merge(eg, max, &time_limit, wo, us, &c) {
         println!("ccx_step - after merge and before deduct");
-        if deduct(eg, symbol_list, max, wo, us, &c) {
+        if deduct(eg, symbol_list, max, &time_limit, wo, us, &c) {
             println!("ccx_step - after deduct");
             let cfind = eg.find_applied_id(&c);
             if !wo.contains(&cfind) {
@@ -112,7 +112,7 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
     let mut iterations = 0;
     while !us.is_empty() && iterations < max_iterations { //&& iterations < max_iterations
         iterations += 1;
-       ccx_step(&mut eg, max, symbol_list, &mut wo, &mut us);
+       ccx_step(&mut eg, max, symbol_list, &mut wo, &mut us, Duration::from_secs(10)); // dummy hardcoded value here
     }
     println!("wo = {:?}", wo);
     println!("us = {:?}", us);
@@ -120,7 +120,7 @@ fn ccx(eqs: Vec<Equation>, max: u64, symbol_list: &Vec<(String, u8)>, max_iterat
 }
 
 fn main() {
-    
+    /* 
     let max = 10;
     let max_iterations = 10000;
     let symbol_list: Vec<(String, u8)> = vec![("f".to_owned(), 2), ("g".to_owned(), 2)];
@@ -141,6 +141,7 @@ fn main() {
         },
         Err(x) => println!("error {x}"),
     }
+    */
     //let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     //eg.dump();
     
@@ -153,6 +154,6 @@ fn main() {
         },
         Err(x) => println!("error {x}"),
     }*/
-    //let config = UeqRunConfig { max_size: 10, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(10), worker_stack_bytes: 100000000 };
-    //let _ = run_ueq_folder("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality_continue.csv", false, config);
+    let config = UeqRunConfigDepth { max_depth: 6, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(1800), worker_stack_bytes: 100000000 };
+    let _ = run_ueq_folder_depth("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality_30min_depth6.csv", false, config);
 }
