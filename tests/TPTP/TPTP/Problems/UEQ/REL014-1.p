@@ -1,0 +1,28 @@
+%------------------------------------------------------------------------------
+% File     : REL014-1 : TPTP v9.0.0. Released v4.0.0.
+% Domain   : Relation Algebra
+% Problem  : One is neutral element
+% Version  : [Mad95] (equational) axioms.
+% English  :
+
+% Refs     : [Mad95] Maddux (1995), Relation-Algebraic Semantics
+%          : [Hoe08] Hoefner (2008), Email to G. Sutcliffe
+% Source   : [Hoe08]
+% Names    :
+
+% Status   : Satisfiable
+% Rating   : 0.43 v9.0.0, 0.11 v8.2.0, 0.00 v8.1.0, 0.25 v7.5.0, 0.00 v6.1.0, 0.20 v6.0.0, 0.00 v4.0.0
+% Syntax   : Number of clauses     :   13 (  13 unt;   0 nHn;   0 RR)
+%            Number of literals    :   13 (  13 equ;   0 neg)
+%            Maximal clause size   :    1 (   1 avg)
+%            Maximal term depth    :    5 (   2 avg)
+%            Number of predicates  :    1 (   0 usr;   0 prp; 2-2 aty)
+%            Number of functors    :    8 (   8 usr;   3 con; 0-2 aty)
+%            Number of variables   :   25 (   0 sgn)
+% SPC      : CNF_SAT_RFO_PEQ_UEQ
+
+% Comments : tptp2X -f tptp:short -t cnf:otter REL014+1.p
+%------------------------------------------------------------------------------
+%----Include axioms of relation algebra
+include('Axioms/REL001-0.ax').
+%------------------------------------------------------------------------------
