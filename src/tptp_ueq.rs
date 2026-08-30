@@ -364,7 +364,20 @@ pub fn run_ueq_folder_depth(
     writeln!(out, "name;stop-reason;iterations;nodes;classes;total_time;size_wo;size_us;initial_size_wo;initial_size_us")
         .map_err(|e| format!("cannot write CSV header: {e}"))?;
 
-    //let mut seen = false;
+    let filename;
+    if disequality_as_equality {
+        filename = "./tests/TPTP/TPTP/depth6-ineqs.txt".to_owned();
+    } else {
+        filename = "./tests/TPTP/TPTP/depth6-noineqs.txt".to_owned();
+    }
+    let content = fs::read_to_string(filename).expect("");
+    let names: Vec<String> = content
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(String::from)
+        .collect();
+
+    let mut seen = false;
     for path in &files {
         // Problem name: file name without extension (unique within a TPTP
         // library; falls back to the full path if there is no file stem).
@@ -373,12 +386,16 @@ pub fn run_ueq_folder_depth(
             .and_then(|s| s.to_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| path.display().to_string());
-        //if name == "MSC018-10".to_string() {
-        //    seen = true;
-        //}
-        //if !seen {
-        //    continue;
-        //}
+        if name == "GRP014-1".to_string() {
+            seen = true;
+        }
+        if !seen {
+            continue;
+        }
+        // this is to only test on the successful ones for ccx in order to compare
+        if !names.contains(&name) {
+            continue;
+        }
         let outcome = run_one_problem_depth(path, disequality_as_equality, config);
 
         let line = match outcome {

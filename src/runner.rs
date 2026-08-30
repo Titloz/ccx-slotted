@@ -80,7 +80,7 @@ where
     pub symbol_list: Vec<(String, u8)>,
     /// The two working queues
     pub wo: VecDeque<AppliedId>,
-    pub us: VecDeque<AppliedId>,
+    pub us: VecDeque<AppliedId>,//PrioQueue<AppliedId>, 
 }
 
 impl<IterData, CustomErrorT> Runner<IterData, CustomErrorT>
@@ -104,7 +104,7 @@ where
             max: 10,
             symbol_list: vec![],
             wo: VecDeque::new(),
-            us: VecDeque::new(),
+            us: VecDeque::new(),//PrioQueue::new(cmp_pq),
         }
     }
 

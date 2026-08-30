@@ -145,7 +145,7 @@ fn main() {
     //let eg = ccx(parsed_eqs, max, &symbol_list, max_iterations);
     //eg.dump();
     
-    /*let res = run_tptp_ueq("./tests/TPTP/TPTP/Problems/UEQ/AGT042-10.p", false);
+    /*let res = run_tptp_ueq_depth("./tests/TPTP/TPTP/Problems/UEQ/BOO067-1.p", false);
     match res {
         Ok(pair) => {
             let (report, egraph) = pair;
@@ -155,5 +155,5 @@ fn main() {
         Err(x) => println!("error {x}"),
     }*/
     let config = UeqRunConfigDepth { max_depth: 6, iter_limit: 200000, node_limit: 100_000, time_limit: Duration::from_secs(1800), worker_stack_bytes: 100000000 };
-    let _ = run_ueq_folder_depth("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality_30min_depth6.csv", false, config);
+    let _ = run_ueq_folder_depth("./tests/TPTP/TPTP/Problems/UEQ/", "./tests/TPTP/TPTP/results_nodisequality_30min_depth6_ccxsuccessfuls_GRP.csv", false, config);
 }

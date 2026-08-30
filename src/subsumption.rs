@@ -10,7 +10,7 @@ pub(crate) fn test_subsumption(eg: &mut MyEGraph, max: u64, a: &AppliedId, b: &A
     }
     let analysis_a = eg.analysis_data(a.id).1.clone();
     let analysis_b = eg.analysis_data(b.id).1.clone();
-    if !analysis_b.is_subset(&analysis_a) {
+    if !analysis_b.is_subset(&analysis_a) && !contains_var(eg, a) {
         return false; 
     }
     if eg.slots(a.id).is_empty() {
@@ -179,6 +179,15 @@ fn test_subsumption_withunifier(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu:
     true
 }
 
+fn contains_var(eg: &MyEGraph, a: &AppliedId) -> bool {
+    for enode in eg.enodes_applied(&a) {
+        match enode {
+            SimpleLang::Var(_) => return true,
+            _ => continue,
+        }
+    }
+    false
+}
 
 fn test_subsumption_withunifier_norec(eg: &MyEGraph, a: &AppliedId, b: &AppliedId, mu: &Unifier, visited: &mut HashMap<(Id, Id), Option<bool>>) -> bool {
     println!("test_subsumption_withunifier - entry with a = {:?} and b = {:?}", a, b);
@@ -209,8 +218,6 @@ fn test_subsumption_withunifier_norec(eg: &MyEGraph, a: &AppliedId, b: &AppliedI
     let mut call_stack : Vec<(AppliedId, AppliedId)> = vec![(a.clone(), b.clone())];
     'whileloop: while !call_stack.is_empty() {
         let (a,b) = call_stack.pop().expect("");
-        //let a = eg.find_applied_id(&a);
-        //let b = eg.find_applied_id(&b);
         match visited.get(&(a.id.clone(), b.id.clone())) {
             Some(opt_b) => {
                 match *opt_b {
@@ -233,7 +240,8 @@ fn test_subsumption_withunifier_norec(eg: &MyEGraph, a: &AppliedId, b: &AppliedI
         }
         let analysis_a = eg.analysis_data(a.id).1.clone();
         let analysis_b = eg.analysis_data(b.id).1.clone();
-        if !analysis_b.is_subset(&analysis_a) {
+        // note that contains var could be more efficiently tested with an eclass analysis
+        if !analysis_b.is_subset(&analysis_a) && !contains_var(eg, &a) {
             visited.insert((a.id.clone(), b.id.clone()), Some(false));
             continue 'whileloop;
         }
@@ -389,8 +397,6 @@ fn test_subsumption_withunifier_norec(eg: &MyEGraph, a: &AppliedId, b: &AppliedI
             }
         }
     }
-    //visited.insert((a.clone(), b.clone()), Some(true));
-    //true
     // at this point the call_stack is empty
     if let Some(Some(bool)) = visited.get(&(abis.id, bbis.id)) {
         return *bool

@@ -1,13 +1,7 @@
 use std::{collections::VecDeque, time::Instant};
 use crate::*;
 
-fn deduct_intern(eg: &mut MyEGraph, max: u64, time_limit: &Duration, elapsed_time: &mut Duration, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { //, budget: &mut usize
-    //println!("entry deduct_intern with {f} and {:?}", c0.id);
-    // wo must verify for all id i, eg.find_id(i)=i
-    // *if *budget <= 0 {
-    //    return true;
-    //}
-    //*budget -= 1;
+fn deduct_intern(eg: &mut MyEGraph, max: u64, time_limit: &Duration, elapsed_time: &mut Duration, wo: &mut VecDeque<AppliedId>, us: &mut VecDeque<AppliedId>, f: &String, i: u8, n: u8, c0: &AppliedId, used: bool, choices: &mut Vec<AppliedId>) -> bool { 
     let start = Instant::now();
     if i!=n {
         // construct a candidate e-node
@@ -33,14 +27,9 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, time_limit: &Duration, elapsed_tim
     } else if used {
         // the e-node contains c0 as a child
         let mut sum_analyses = 1;
-        //let mut rev_children = vec![];
-        //println!("choices = [");
         for child in choices.clone() {
-            //print!("{:?}, ", child.id);
             sum_analyses += (*eg.analysis_data(child.id)).0;
-            //rev_children.push(child);
         }
-        //println!("]");
         if sum_analyses <= max { // satisfiability test
 
             // add the new e-node app(app(...app(f,c1)...,cn-1),cn)
@@ -51,7 +40,7 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, time_limit: &Duration, elapsed_tim
                 (class_f, b) = eg.add_changes(SimpleLang::App(class_f, child.clone()));
                 has_changed = has_changed || b;
             }
-            //println!("classf before rebuild = {:?}", class_f.id);
+            
             eg.rebuild();
             update(eg, us);
             update(eg, wo);
@@ -63,10 +52,9 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, time_limit: &Duration, elapsed_tim
             }
 
             let new_ai = eg.find_applied_id(&class_f);
-            //println!("classf = {:?}", new_ai.id);
+           
 
             // subsumption tests
-            // for efficiency reasons, we get rid of them
             for c in wo.clone() {
                 if test_subsumption(eg, max, &c, &new_ai) {
                     return true;
@@ -95,10 +83,6 @@ fn deduct_intern(eg: &mut MyEGraph, max: u64, time_limit: &Duration, elapsed_tim
                 return false;
             }
             
-
-            //if !us.contains(&new_ai) && eg.find_id(new_ai.id) != eg.find_id(c0.id) {
-            //   us.push_back(new_ai);
-            //}
             wo_no_us(wo, us);
             println!("{:?}", wo);
             println!("{:?}", us);
